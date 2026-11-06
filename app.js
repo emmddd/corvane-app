@@ -552,6 +552,8 @@
             <button class="pill" id="logoReset" type="button">Default</button>
           </div>
         </div>
+        <button class="pill ghost" id="iconDl" type="button" style="margin-bottom:6px">Download Home Screen icon</button>
+        <p class="hint" style="margin:6px 4px 16px">To use this logo as the iPhone Home Screen icon: download the icon, go to github.com/emmddd/corvane-app → Add file → Upload files, upload <b>apple-touch-icon.png</b> and tap Commit changes. Wait a minute, then remove and re-add the app to your Home Screen.</p>
         <div class="field"><label for="bName">App name</label><input id="bName" maxlength="24" value="${esc(S.brand.name)}"></div>
         <div class="field"><label for="bColor">Accent colour</label>
           <div class="color-row">
@@ -585,6 +587,16 @@
       e.target.value = "";
     });
     $("#logoReset").addEventListener("click", () => { logo = null; paintPrev(); });
+    $("#iconDl").addEventListener("click", async () => {
+      if (!logo) return toast("Upload a logo first");
+      const url = await iconFromLogo(logo, 512);
+      if (!url) return toast("Couldn't make the icon");
+      const blob = await (await fetch(url)).blob();
+      const u = URL.createObjectURL(blob), a = document.createElement("a");
+      a.href = u; a.download = "apple-touch-icon.png";
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 3000);
+      toast("Icon downloaded");
+    });
     $("#bColor").addEventListener("input", (e) => { applyColor(e.target.value); paintSwatches(); });
     $$(".swatch", view).forEach((s) => s.addEventListener("click", () => { $("#bColor").value = s.dataset.c; applyColor(s.dataset.c); paintSwatches(); }));
 
