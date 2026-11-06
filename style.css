@@ -95,6 +95,21 @@
 textarea { width: 100%; min-height: 130px; padding: 15px 16px; border-radius: 16px; border: 1.5px solid var(--line); background: var(--field); font: inherit; font-size: 17px; outline: none; resize: vertical; }
 textarea:focus { border-color: var(--red); }
 
+/* ---------- Number font (Source Sans 3, SIL Open Font License) ---------- */
+@font-face { font-family: "Source Sans 3"; font-weight: 600; font-style: normal; font-display: swap; src: url("fonts/source-sans-3-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Source Sans 3"; font-weight: 700; font-style: normal; font-display: swap; src: url("fonts/source-sans-3-latin-700-normal.woff2") format("woff2"); }
+:root { --num-font: "Source Sans 3", -apple-system, "Helvetica Neue", sans-serif; --num-ink: #333; }
+.total, .acct-bal, .tx-amt, .credit-row b, .amount-input {
+  font-family: var(--num-font) !important; font-variant-numeric: lining-nums tabular-nums; letter-spacing: 0 !important;
+}
+.total { font-weight: 700; font-size: 52px; color: var(--num-ink); }
+.acct-bal { font-weight: 700; font-size: 40px; color: var(--num-ink); }
+.tx-amt { font-weight: 600; font-size: 17px; }
+.tx-amt:not(.in) { color: var(--num-ink); }
+.credit-row b { font-weight: 700; font-size: 15px; color: var(--num-ink); }
+.amount-input { font-weight: 700 !important; }
+@media (max-width: 380px) { .total { font-size: 44px; } .acct-bal { font-size: 36px; } }
+
 /* ---------- Base ---------- */
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); }
