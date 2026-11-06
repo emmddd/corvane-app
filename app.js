@@ -435,7 +435,7 @@
     let logo = S.brand.logo;
     view.innerHTML = `${header("Customize", "#/more")}
       <p class="hint" style="margin-top:0">Change the logo, name, colour, account details and figures. Saved on this device — use Export setup under More to share it with your team.</p>
-      <div class="section-title">Brand</div>
+      <div class="section-title">Logo &amp; name</div>
       <div class="panel">
         <div class="logo-edit">
           <span class="logo xl" id="logoPrev"></span>
@@ -618,12 +618,72 @@
   $("#toggleHide").addEventListener("click", () => { S.hide = !S.hide; save(); paintHide(); route(false); });
 
   const TABS = [["#/", "Accounts", I.home], ["#/transfer", "Transfer", I.transfer], ["#/pay", "Pay", I.bill], ["#/more", "More", I.menu]];
-  $("#tabbar").innerHTML = '<span class="tab-ind" id="tabInd"></span>' + TABS.map(([h, l, ic]) => `<a href="${h}">${ic}<span>${l}</span></a>`).join("");
+  $("#tabbar").innerHTML = '<span class="tab-ind" id="tabInd"></span>' + TABS.map(([h, l, ic]) => `<a href="${h}" draggable="false">${ic}<span>${l}</span></a>`).join("");
   const tabIndex = (p) => p === "/transfer" ? 1 : p === "/pay" ? 2 : (p === "/more" || p === "/customize") ? 3 : 0;
-  function paintTabs(i) {
-    $$("#tabbar a").forEach((a, k) => { a.classList.toggle("on", k === i); a.setAttribute("aria-current", k === i ? "page" : "false"); });
-    $("#tabInd").style.transform = `translateX(${i * 100}%)`;
+  // ---------- Liquid tab indicator ----------
+  // The glass pill stretches as it travels, squashes as it lands, and can be dragged with a finger.
+  const tabbar = $("#tabbar"), ind = $("#tabInd");
+  let indPos = 0, indAnim = null, dragging = false, dragMoved = false;
+  const setInd = (x, sx, sy) => { ind.style.transform = `translateX(${x * 100}%) scale(${sx || 1}, ${sy || 1})`; };
+  function moveInd(to, animate) {
+    const from = indPos;
+    if (from === to && !dragging) return;
+    indPos = to;
+    if (indAnim) indAnim.cancel();
+    if (!animate || reduceMotion() || from === to || !ind.animate) { setInd(to); return; }
+    const dist = Math.abs(to - from), stretch = 1 + Math.min(0.55, 0.22 + 0.12 * dist);
+    indAnim = ind.animate([
+      { transform: `translateX(${from * 100}%) scale(1, 1)` },
+      { transform: `translateX(${(from + (to - from) * 0.18) * 100}%) scale(${1 + (stretch - 1) * 0.6}, 0.94)`, offset: 0.16 },
+      { transform: `translateX(${(from + (to - from) * 0.62) * 100}%) scale(${stretch}, 0.86)`, offset: 0.48 },
+      { transform: `translateX(${(to + (to - from) * 0.04) * 100}%) scale(0.9, 1.1)`, offset: 0.76 },
+      { transform: `translateX(${to * 100}%) scale(1.03, 0.98)`, offset: 0.9 },
+      { transform: `translateX(${to * 100}%) scale(1, 1)` }
+    ], { duration: 560 + 70 * dist, easing: "cubic-bezier(.25,.75,.25,1)" });
+    setInd(to);
+    tabbar.classList.add("moving");
+    indAnim.onfinish = () => tabbar.classList.remove("moving");
   }
+  function paintTabs(i, animate) {
+    $$("#tabbar a").forEach((a, k) => { a.classList.toggle("on", k === i); a.setAttribute("aria-current", k === i ? "page" : "false"); });
+    moveInd(i, animate);
+  }
+  // Drag the pill across the bar like iOS
+  (function enableDrag() {
+    let startX = 0, lastX = 0, lastT = 0, slotW = 1;
+    const posFromX = (clientX) => {
+      const r = tabbar.getBoundingClientRect();
+      return Math.max(0, Math.min(TABS.length - 1, (clientX - r.left - 6) / slotW - 0.5));
+    };
+    tabbar.addEventListener("pointerdown", (e) => {
+      slotW = (tabbar.clientWidth - 12) / TABS.length;
+      startX = lastX = e.clientX; lastT = e.timeStamp; dragging = true; dragMoved = false;
+      tabbar.classList.add("pressing");
+    });
+    tabbar.addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      if (!dragMoved && Math.abs(e.clientX - startX) < 8) return;
+      if (!dragMoved) { dragMoved = true; if (indAnim) indAnim.cancel(); try { tabbar.setPointerCapture(e.pointerId); } catch (err) {} }
+      const v = (e.clientX - lastX) / Math.max(1, e.timeStamp - lastT); lastX = e.clientX; lastT = e.timeStamp;
+      const sx = 1.08 + Math.min(0.35, Math.abs(v) * 0.25);
+      indPos = posFromX(e.clientX);
+      setInd(indPos, sx, 1.08 - (sx - 1.08) * 0.4);
+      const near = Math.round(indPos);
+      $$("#tabbar a").forEach((a, k) => a.classList.toggle("on", k === near));
+    });
+    const end = (e) => {
+      if (!dragging) return;
+      dragging = false; tabbar.classList.remove("pressing");
+      if (!dragMoved) return;
+      const i = Math.round(indPos);
+      const from = indPos; indPos = from; moveInd(i, true);
+      if (TABS[i][0] !== location.hash && !(TABS[i][0] === "#/" && !location.hash)) go(TABS[i][0]);
+      setTimeout(() => { dragMoved = false; }, 0);
+    };
+    tabbar.addEventListener("pointerup", end);
+    tabbar.addEventListener("pointercancel", end);
+    tabbar.addEventListener("click", (e) => { if (dragMoved) { e.preventDefault(); e.stopPropagation(); } }, true);
+  })();
 
   // Profile picture: one tap opens More; four quick taps toggle full edit access
   let taps = 0, tapTimer = null;
@@ -674,7 +734,7 @@
     const samePage = cur.path === path;
     cur = { path, depth: d, tab: ti };
     document.documentElement.dataset.dir = dir;
-    paintTabs(ti);
+    paintTabs(ti, cur.path !== null && animate !== false);
     const render = () => { paintBrand(); if (!samePage) window.scrollTo(0, 0); dispatch(path, params); };
     if (animate === false || reduceMotion() || cur === null) return render();
     if (document.startViewTransition) {

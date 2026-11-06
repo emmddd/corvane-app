@@ -299,8 +299,25 @@ a { color: inherit; text-decoration: none; }
   border-radius: 999px; z-index: 0;
   background: color-mix(in srgb, var(--red) 15%, rgba(255,255,255,.5));
   box-shadow: inset 0 1px 1px var(--glass-hi), inset 0 -1px 1px rgba(255,255,255,.2), 0 4px 14px color-mix(in srgb, var(--red) 20%, transparent);
-  transition: transform .55s var(--spring);
+  transform-origin: center; will-change: transform;
+  -webkit-backdrop-filter: blur(6px) saturate(200%) brightness(1.06); backdrop-filter: blur(6px) saturate(200%) brightness(1.06);
+  transition: background .35s var(--ease), box-shadow .35s var(--ease);
 }
+.tab-ind::after {   /* lens highlight */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: radial-gradient(120% 90% at 30% 0%, rgba(255,255,255,.75), rgba(255,255,255,0) 55%),
+              linear-gradient(180deg, rgba(255,255,255,0) 60%, rgba(255,255,255,.35));
+  mix-blend-mode: soft-light;
+}
+.tabbar { touch-action: pan-y; -webkit-user-select: none; user-select: none; }
+.tabbar.pressing .tab-ind, .tabbar.moving .tab-ind {
+  background: color-mix(in srgb, var(--red) 10%, rgba(255,255,255,.62));
+  box-shadow: inset 0 1px 2px var(--glass-hi), inset 0 -1px 2px rgba(255,255,255,.35), 0 10px 26px color-mix(in srgb, var(--red) 28%, transparent);
+}
+.tabbar a { -webkit-touch-callout: none; -webkit-user-drag: none; }
+.tab-ind { pointer-events: none; }
+.tabbar a svg { transition: transform .5s var(--spring); }
+.tabbar a.on svg { transform: scale(1.12); }
 .tabbar a {
   position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 10px 0; border-radius: 999px; color: var(--muted); font-size: 13.5px; font-weight: 500;
