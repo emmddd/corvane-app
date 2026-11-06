@@ -1,4 +1,5 @@
-/* Corvane — clickable banking app prototype (sample data, stored on this device only) */
+/* Corvane — clickable banking app prototype.
+   Sample data only, saved on this device. Brand, accounts and figures are editable under More → Customize. */
 (function () {
   "use strict";
 
@@ -14,21 +15,29 @@
     wallet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h1"/></svg>',
     layers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg>',
     piggy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 11a7 6 0 0 1 13-2h2v4l-2 1v3h-3v-2H9v2H6v-3a6 6 0 0 1-1-3Z"/><circle cx="15" cy="10" r=".8" fill="currentColor"/></svg>',
+    card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6 15h4"/></svg>',
+    chart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16M6 15l4-4 3 3 5-6"/></svg>',
     chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>',
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m15 5-7 7 7 7"/></svg>',
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V20H4z"/><path d="M10 20v-5h4v5"/></svg>',
     menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'
   };
-  const ICONS_BY_KIND = { chequing: I.wallet, savings: I.piggy, other: I.layers };
+  const KINDS = { chequing: ["Chequing", I.wallet], savings: ["Savings", I.piggy], credit: ["Credit card", I.card], invest: ["Investments", I.chart], other: ["Other", I.layers] };
+  const CATS = ["Groceries", "Dining", "Transport", "Shopping", "Bills", "Bill payment", "Income", "Transfer", "Adjustment", "Other"];
+  const SWATCHES = ["#C62D33", "#1F3864", "#0A7C6E", "#5B3FD0", "#D9822B", "#1C1C1E"];
+  const DEFAULT_LOGO = '<svg viewBox="0 0 24 24"><path d="M16.5 8.2A5.5 5.5 0 1 0 16.5 15.8" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/><circle cx="18.6" cy="9.9" r="1.3" fill="#fff"/><circle cx="18.6" cy="14.1" r="1.3" fill="#fff"/></svg>';
+  const DEFAULT_BRAND = { name: "Corvane", logo: null, color: "#C62D33" };
 
   // ---------- State ----------
   const KEY = "corvane-proto-v1";
-  const today = () => new Date().toISOString().slice(0, 10);
-  const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+  const today = () => localISO(new Date());
+  const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return localISO(d); };
+  function localISO(d) { return new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); }
 
   function seed() {
     return {
       hide: false,
+      brand: { ...DEFAULT_BRAND },
       accounts: [
         { id: "chq", name: "Chequing", kind: "chequing", sub: "Everyday account", last4: "4821", balance: 3842.17 },
         { id: "oth", name: "Other", kind: "other", sub: "Account", last4: "7390", balance: 12650.00 }
@@ -47,17 +56,36 @@
       nextId: 9
     };
   }
+  function isValid(s) { return s && Array.isArray(s.accounts) && s.accounts.length > 0 && Array.isArray(s.tx); }
+  function migrate(s) {
+    s.brand = Object.assign({}, DEFAULT_BRAND, s.brand || {});
+    if (!/^#[0-9a-f]{6}$/i.test(s.brand.color)) s.brand.color = DEFAULT_BRAND.color;
+    s.payees = Array.isArray(s.payees) ? s.payees : [];
+    s.accounts.forEach((a) => { a.kind = KINDS[a.kind] ? a.kind : "other"; a.balance = Number(a.balance) || 0; a.last4 = String(a.last4 || "0000"); });
+    s.nextId = s.nextId || s.tx.reduce((m, t) => Math.max(m, t.id), 0) + 1;
+    s.hide = !!s.hide;
+    return s;
+  }
   let S;
-  try { S = JSON.parse(localStorage.getItem(KEY)) || seed(); } catch (e) { S = seed(); }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+  try { const raw = JSON.parse(localStorage.getItem(KEY)); S = isValid(raw) ? migrate(raw) : seed(); } catch (e) { S = seed(); }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(S)); return true; }
+    catch (e) { toast("Couldn't save on this device"); return false; }
+  }
 
   // ---------- Helpers ----------
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel, root) => [...(root || document).querySelectorAll(sel)];
+  const view = $("#view");
   const fmt = (n) => (n < 0 ? "-" : "") + "$" + Math.abs(n).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const money = (n) => S.hide ? '<span class="hidden-amt">$••••••</span>' : fmt(n);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const acct = (id) => S.accounts.find((a) => a.id === id);
-  const total = () => S.accounts.reduce((s, a) => s + a.balance, 0);
+  const total = () => round2(S.accounts.reduce((s, a) => s + a.balance, 0));
   const round2 = (n) => Math.round(n * 100) / 100;
+  const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const parseAmt = (v) => { const n = parseFloat(String(v).replace(/[^0-9.]/g, "")); return isFinite(n) ? round2(n) : NaN; };
+  const parseSigned = (v) => { const s = String(v).trim(); const n = parseFloat(s.replace(/[^0-9.]/g, "")); return isFinite(n) ? round2(/^\s*-|^\(.*\)$/.test(s) ? -n : n) : NaN; };
   const prettyDate = (iso) => {
     const d = new Date(iso + "T12:00:00");
     const diff = Math.round((new Date(today() + "T12:00:00") - d) / 864e5);
@@ -66,8 +94,6 @@
     return d.toLocaleDateString("en-CA", { month: "short", day: "numeric" });
   };
   const greeting = () => { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; };
-  const $ = (sel) => document.querySelector(sel);
-  const view = $("#view");
 
   function toast(msg) {
     const t = $("#toast"); t.textContent = msg; t.classList.add("show");
@@ -75,21 +101,83 @@
   }
   function addTx(acctId, name, amount, cat, date) {
     S.tx.unshift({ id: S.nextId++, acct: acctId, name, amount: round2(amount), date: date || today(), cat });
+    sortTx();
   }
+  function sortTx() { S.tx.sort((x, y) => y.date.localeCompare(x.date) || y.id - x.id); }
   function acctOptions(selected, exclude) {
     return S.accounts.filter((a) => a.id !== exclude).map((a) =>
-      `<option value="${a.id}" ${a.id === selected ? "selected" : ""}>${esc(a.name)} ••${a.last4} — ${S.hide ? "hidden" : fmt(a.balance)}</option>`).join("");
+      `<option value="${a.id}" ${a.id === selected ? "selected" : ""}>${esc(a.name)} ••${esc(a.last4)} — ${S.hide ? "hidden" : fmt(a.balance)}</option>`).join("");
   }
-  function parseAmt(v) { const n = parseFloat(String(v).replace(/[^0-9.]/g, "")); return isFinite(n) ? round2(n) : NaN; }
+  function catOptions(sel) {
+    const list = CATS.includes(sel) || !sel ? CATS : [sel, ...CATS];
+    return list.map((c) => `<option ${c === sel ? "selected" : ""}>${esc(c)}</option>`).join("");
+  }
   function header(title, backTo) {
-    return `<div class="page-title"><a class="back" href="${backTo || "#/"}" aria-label="Back">${I.back}</a><h1>${esc(title)}</h1></div>`;
+    return `<div class="page-title"><a class="back glass round" href="${backTo || "#/"}" aria-label="Back">${I.back}</a><h1>${esc(title)}</h1></div>`;
   }
   function txRow(t, showAcct) {
     const a = acct(t.acct);
-    return `<div class="tx"><div class="tx-dot">${esc(t.name.charAt(0).toUpperCase())}</div>
+    return `<a class="tx" href="#/tx/${t.id}"><div class="tx-dot">${esc(t.name.charAt(0).toUpperCase())}</div>
       <div class="tx-main"><div class="tx-name">${esc(t.name)}</div>
       <div class="tx-meta">${prettyDate(t.date)} · ${esc(t.cat)}${showAcct && a ? " · " + esc(a.name) : ""}</div></div>
-      <div class="tx-amt ${t.amount > 0 ? "in" : ""}">${S.hide ? "••••" : (t.amount > 0 ? "+" : "") + fmt(t.amount)}</div></div>`;
+      <div class="tx-amt ${t.amount > 0 ? "in" : ""}">${S.hide ? "••••" : (t.amount > 0 ? "+" : "") + fmt(t.amount)}</div></a>`;
+  }
+  const fail = (m) => { const e = $("#err"); e.textContent = m; e.scrollIntoView({ block: "center", behavior: reduceMotion() ? "auto" : "smooth" }); };
+
+  // Animated figures: numbers glide from their last value to the new one
+  const prevVals = {};
+  function countUps() {
+    $$("[data-val]", view).forEach((el) => {
+      const k = el.dataset.key, to = Number(el.dataset.val), from = prevVals[k];
+      prevVals[k] = to;
+      if (S.hide || reduceMotion() || from === undefined || from === to) return;
+      const t0 = performance.now(), D = 750;
+      const step = (now) => {
+        const p = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - p, 4);
+        el.textContent = fmt(round2(from + (to - from) * e));
+        if (p < 1) requestAnimationFrame(step);
+      };
+      el.textContent = fmt(from);
+      requestAnimationFrame(step);
+    });
+  }
+
+  // Logo: scale any image to a crisp 512px square (sharp on 3x Retina) with transparent padding
+  function readLogo(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onerror = reject;
+      r.onload = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          const N = 512, c = document.createElement("canvas"); c.width = c.height = N;
+          const w0 = img.naturalWidth || N, h0 = img.naturalHeight || N;
+          const s = Math.min(N / w0, N / h0) * 0.86, w = w0 * s, h = h0 * s;
+          const x = c.getContext("2d"); x.imageSmoothingQuality = "high";
+          x.drawImage(img, (N - w) / 2, (N - h) / 2, w, h);
+          resolve(c.toDataURL("image/png"));
+        };
+        img.src = r.result;
+      };
+      r.readAsDataURL(file);
+    });
+  }
+
+  // ---------- Brand ----------
+  function logoHTML(src) { return src ? `<img src="${src}" alt="">` : DEFAULT_LOGO; }
+  function applyColor(c) {
+    document.documentElement.style.setProperty("--red", c);
+    const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", c);
+  }
+  function paintBrand() {
+    const L = $("#logo");
+    L.innerHTML = logoHTML(S.brand.logo); L.classList.toggle("custom", !!S.brand.logo);
+    $("#brandName").textContent = S.brand.name;
+    document.title = S.brand.name;
+    const t = document.querySelector('meta[name="apple-mobile-web-app-title"]'); if (t) t.setAttribute("content", S.brand.name);
+    const ic = document.querySelector('link[rel="apple-touch-icon"]'); if (ic) ic.href = S.brand.logo || "icon.svg";
+    applyColor(S.brand.color);
   }
 
   // ---------- Views ----------
@@ -97,37 +185,38 @@
     const query = (q || "").trim().toLowerCase();
     const results = query ? S.tx.filter((t) => (t.name + " " + t.cat).toLowerCase().includes(query)) : [];
     view.innerHTML = `
-      <label class="search">${I.search}<input id="search" type="search" placeholder="Search transactions and payees" value="${esc(q || "")}" autocomplete="off"></label>
+      <label class="search glass">${I.search}<input id="search" type="search" placeholder="Search transactions and payees" value="${esc(q || "")}" autocomplete="off"></label>
       ${query ? `<div class="section-title">Results</div><div class="tx-list">${results.map((t) => txRow(t, true)).join("") || '<div class="empty">No matches</div>'}</div>` : `
       <p class="greet">${greeting()}</p>
       <span class="label">Total in your accounts</span>
-      <div class="total">${money(total())}</div>
+      <div class="total" data-key="total" data-val="${total()}">${money(total())}</div>
       <div class="quick">
-        <a href="#/transfer"><span class="q-icon" style="color:var(--red)">${I.transfer}</span>Transfer</a>
-        <a href="#/pay"><span class="q-icon" style="color:var(--red)">${I.bill}</span>Pay bill</a>
-        <a href="#/add"><span class="q-icon" style="color:var(--red)">${I.plus}</span>Add entry</a>
-        <a href="#/edit"><span class="q-icon" style="color:var(--red)">${I.pencil}</span>Edit balances</a>
+        <a href="#/transfer"><span class="q-icon">${I.transfer}</span>Transfer</a>
+        <a href="#/pay"><span class="q-icon">${I.bill}</span>Pay bill</a>
+        <a href="#/add"><span class="q-icon">${I.plus}</span>Add entry</a>
+        <a href="#/edit"><span class="q-icon">${I.pencil}</span>Edit balances</a>
       </div>
       <div class="section-title">Deposit accounts</div>
       ${S.accounts.map((a) => `
         <div class="acct">
           <a class="acct-head" href="#/account/${a.id}">
-            <span class="acct-icon" style="color:var(--red)">${ICONS_BY_KIND[a.kind] || I.layers}</span>
-            <span><div class="acct-name">${esc(a.name)}</div><div class="acct-sub">${esc(a.sub)} · <span style="white-space:nowrap">•••• ${a.last4}</span></div></span>
-            <span class="chev" style="color:var(--muted)">${I.chev}</span>
+            <span class="acct-icon">${KINDS[a.kind][1]}</span>
+            <span><div class="acct-name">${esc(a.name)}</div><div class="acct-sub">${esc(a.sub)} · <span class="nw">•••• ${esc(a.last4)}</span></div></span>
+            <span class="chev">${I.chev}</span>
           </a>
           <span class="label">Available balance</span>
-          <div class="acct-bal">${money(a.balance)}</div>
+          <div class="acct-bal" data-key="acct-${a.id}" data-val="${a.balance}">${money(a.balance)}</div>
           <div class="btn-row">
             <a class="pill soft" href="#/transfer?from=${a.id}">Transfer</a>
             <a class="pill" href="#/add?acct=${a.id}">Add entry</a>
           </div>
         </div>`).join("")}
       <div class="section-title" style="margin-top:26px">Recent activity</div>
-      <div class="tx-list">${S.tx.slice(0, 5).map((t) => txRow(t, true)).join("")}</div>`}
+      <div class="tx-list">${S.tx.slice(0, 5).map((t) => txRow(t, true)).join("") || '<div class="empty">No transactions yet</div>'}</div>`}
     `;
     const s = $("#search");
     s.addEventListener("input", () => { const pos = s.selectionStart; Home(s.value); const n = $("#search"); n.focus(); n.setSelectionRange(pos, pos); });
+    countUps();
   }
 
   function Account(id) {
@@ -136,9 +225,9 @@
     const list = S.tx.filter((t) => t.acct === id);
     view.innerHTML = `${header(a.name)}
       <div class="acct">
-        <div class="acct-sub">${esc(a.sub)} · •••• ${a.last4}</div>
+        <div class="acct-sub">${esc(a.sub)} · <span class="nw">•••• ${esc(a.last4)}</span></div>
         <span class="label">Available balance</span>
-        <div class="acct-bal">${money(a.balance)}</div>
+        <div class="acct-bal" data-key="acct-${a.id}" data-val="${a.balance}">${money(a.balance)}</div>
         <div class="btn-row">
           <a class="pill soft" href="#/transfer?from=${a.id}">Transfer</a>
           <a class="pill" href="#/pay?from=${a.id}">Pay bill</a>
@@ -146,32 +235,33 @@
         </div>
       </div>
       <div class="section-title">Transactions</div>
-      <div class="tx-list">${list.map((t) => txRow(t)).join("") || '<div class="empty">No transactions yet</div>'}</div>`;
+      <div class="tx-list">${list.map((t) => txRow(t)).join("") || '<div class="empty">No transactions yet</div>'}</div>
+      <p class="hint" style="margin-top:12px">Tap a transaction to edit or delete it.</p>`;
+    countUps();
   }
 
   function Transfer(params) {
     if (S.accounts.length < 2) {
-      view.innerHTML = header("Transfer") + '<div class="empty">Add a second account under More to make transfers.</div>';
+      view.innerHTML = header("Transfer") + '<div class="empty">Add a second account under More → Customize to make transfers.</div>';
       return;
     }
-    const from = params.get("from") || S.accounts[0].id;
+    const from = acct(params.get("from")) ? params.get("from") : S.accounts[0].id;
     const to = S.accounts.find((a) => a.id !== from).id;
     view.innerHTML = `${header("Transfer")}
-      <div class="field"><label>Amount</label><input class="amount-input" id="amt" inputmode="decimal" placeholder="$0.00"></div>
-      <div class="field"><label>From</label><select id="from">${acctOptions(from)}</select></div>
-      <div class="field"><label>To</label><select id="to">${acctOptions(to, from)}</select></div>
-      <div class="field"><label>Note (optional)</label><input id="note" maxlength="40" placeholder="e.g. Rent savings"></div>
+      <div class="field"><label for="amt">Amount</label><input class="amount-input" id="amt" inputmode="decimal" placeholder="$0.00"></div>
+      <div class="field"><label for="from">From</label><select id="from">${acctOptions(from)}</select></div>
+      <div class="field"><label for="to">To</label><select id="to">${acctOptions(to, from)}</select></div>
+      <div class="field"><label for="note">Note (optional)</label><input id="note" maxlength="40" placeholder="e.g. Rent savings"></div>
       <div class="err" id="err"></div>
       <button class="pill solid" id="go">Transfer</button>`;
     $("#from").addEventListener("change", (e) => {
-      const f = e.target.value; const keep = $("#to").value;
+      const f = e.target.value, keep = $("#to").value;
       $("#to").innerHTML = acctOptions(keep !== f ? keep : S.accounts.find((a) => a.id !== f).id, f);
     });
     $("#go").addEventListener("click", () => {
       const amt = parseAmt($("#amt").value), f = acct($("#from").value), t = acct($("#to").value);
-      const err = $("#err");
-      if (!(amt > 0)) return (err.textContent = "Enter an amount greater than $0.");
-      if (amt > f.balance) return (err.textContent = `That's more than the ${f.name} balance.`);
+      if (!(amt > 0)) return fail("Enter an amount greater than $0.");
+      if (amt > f.balance) return fail(`That's more than the ${f.name} balance.`);
       f.balance = round2(f.balance - amt); t.balance = round2(t.balance + amt);
       const note = $("#note").value.trim();
       addTx(f.id, note || `Transfer to ${t.name}`, -amt, "Transfer");
@@ -181,132 +271,308 @@
   }
 
   function Pay(params) {
-    const from = params.get("from") || S.accounts[0].id;
+    const from = acct(params.get("from")) ? params.get("from") : S.accounts[0].id;
     view.innerHTML = `${header("Pay bill")}
-      <div class="field"><label>Payee</label><select id="payee">${S.payees.map((p) => `<option>${esc(p)}</option>`).join("")}<option value="__new">+ Add a payee…</option></select></div>
-      <div class="field" id="newPayeeWrap" hidden><label>New payee name</label><input id="newPayee" maxlength="40"></div>
-      <div class="field"><label>Amount</label><input class="amount-input" id="amt" inputmode="decimal" placeholder="$0.00"></div>
-      <div class="field"><label>From</label><select id="from">${acctOptions(from)}</select></div>
-      <div class="field"><label>Date</label><input id="date" type="date" value="${today()}"></div>
+      <div class="field"><label for="payee">Payee</label><select id="payee">${S.payees.map((p) => `<option>${esc(p)}</option>`).join("")}<option value="__new">+ Add a payee…</option></select></div>
+      <div class="field" id="newPayeeWrap" hidden><label for="newPayee">New payee name</label><input id="newPayee" maxlength="40"></div>
+      <div class="field"><label for="amt">Amount</label><input class="amount-input" id="amt" inputmode="decimal" placeholder="$0.00"></div>
+      <div class="field"><label for="from">From</label><select id="from">${acctOptions(from)}</select></div>
+      <div class="field"><label for="date">Date</label><input id="date" type="date" value="${today()}"></div>
       <div class="err" id="err"></div>
       <button class="pill solid" id="go">Pay bill</button>`;
+    if (!S.payees.length) $("#newPayeeWrap").hidden = false;
     $("#payee").addEventListener("change", (e) => { $("#newPayeeWrap").hidden = e.target.value !== "__new"; });
     $("#go").addEventListener("click", () => {
-      const err = $("#err");
       let payee = $("#payee").value;
       if (payee === "__new") {
         payee = $("#newPayee").value.trim();
-        if (!payee) return (err.textContent = "Enter the payee's name.");
-        if (!S.payees.includes(payee)) S.payees.push(payee);
+        if (!payee) return fail("Enter the payee's name.");
       }
       const amt = parseAmt($("#amt").value), f = acct($("#from").value);
-      if (!(amt > 0)) return (err.textContent = "Enter an amount greater than $0.");
-      if (amt > f.balance) return (err.textContent = `That's more than the ${f.name} balance.`);
+      if (!(amt > 0)) return fail("Enter an amount greater than $0.");
+      if (amt > f.balance) return fail(`That's more than the ${f.name} balance.`);
+      if (!S.payees.includes(payee)) S.payees.push(payee);
       f.balance = round2(f.balance - amt);
       addTx(f.id, payee, -amt, "Bill payment", $("#date").value || today());
       save(); toast(`Paid ${fmt(amt)} to ${payee}`); go("#/");
     });
   }
 
+  function entryForm(t) {
+    const dirIn = t ? t.amount > 0 : false;
+    return `
+      <div class="seg"><button type="button" data-d="out" class="${dirIn ? "" : "on"}">Money out</button><button type="button" data-d="in" class="${dirIn ? "on" : ""}">Money in</button></div>
+      <div class="field"><label for="amt">Amount</label><input class="amount-input" id="amt" inputmode="decimal" placeholder="$0.00" value="${t ? Math.abs(t.amount).toFixed(2) : ""}"></div>
+      <div class="field"><label for="name">Description</label><input id="name" maxlength="40" placeholder="e.g. Groceries at Loblaws" value="${t ? esc(t.name) : ""}"></div>
+      <div class="field"><label for="cat">Category</label><select id="cat">${catOptions(t ? t.cat : "Groceries")}</select></div>`;
+  }
+  function wireSeg(onChange) {
+    let dir = $(".seg .on").dataset.d;
+    $$(".seg button", view).forEach((b) => b.addEventListener("click", () => {
+      dir = b.dataset.d;
+      $$(".seg button", view).forEach((x) => x.classList.toggle("on", x === b));
+      if (onChange) onChange(dir);
+    }));
+    return () => dir;
+  }
+
   function AddEntry(params) {
-    const sel = params.get("acct") || S.accounts[0].id;
-    let dir = "out";
+    const sel = acct(params.get("acct")) ? params.get("acct") : S.accounts[0].id;
     view.innerHTML = `${header("Add entry")}
-      <div class="seg"><button data-d="out" class="on">Money out</button><button data-d="in">Money in</button></div>
-      <div class="field"><label>Amount</label><input class="amount-input" id="amt" inputmode="decimal" placeholder="$0.00"></div>
-      <div class="field"><label>Description</label><input id="name" maxlength="40" placeholder="e.g. Groceries at Loblaws"></div>
-      <div class="field"><label>Category</label><select id="cat">${["Groceries", "Dining", "Transport", "Shopping", "Bills", "Income", "Other"].map((c) => `<option>${c}</option>`).join("")}</select></div>
-      <div class="field"><label>Account</label><select id="acct">${acctOptions(sel)}</select></div>
-      <div class="field"><label>Date</label><input id="date" type="date" value="${today()}"></div>
+      ${entryForm(null)}
+      <div class="field"><label for="acct">Account</label><select id="acct">${acctOptions(sel)}</select></div>
+      <div class="field"><label for="date">Date</label><input id="date" type="date" value="${today()}"></div>
       <div class="err" id="err"></div>
       <button class="pill solid" id="go">Save entry</button>`;
-    view.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => {
-      dir = b.dataset.d;
-      view.querySelectorAll(".seg button").forEach((x) => x.classList.toggle("on", x === b));
-      $("#cat").value = dir === "in" ? "Income" : "Groceries";
-    }));
+    const getDir = wireSeg((d) => { $("#cat").value = d === "in" ? "Income" : "Groceries"; });
     $("#go").addEventListener("click", () => {
       const amt = parseAmt($("#amt").value), name = $("#name").value.trim(), a = acct($("#acct").value);
-      const err = $("#err");
-      if (!(amt > 0)) return (err.textContent = "Enter an amount greater than $0.");
-      if (!name) return (err.textContent = "Add a short description.");
-      const signed = dir === "in" ? amt : -amt;
+      if (!(amt > 0)) return fail("Enter an amount greater than $0.");
+      if (!name) return fail("Add a short description.");
+      const signed = getDir() === "in" ? amt : -amt;
       a.balance = round2(a.balance + signed);
       addTx(a.id, name, signed, $("#cat").value, $("#date").value || today());
-      S.tx.sort((x, y) => y.date.localeCompare(x.date) || y.id - x.id);
       save(); toast("Entry saved"); go("#/account/" + a.id);
+    });
+  }
+
+  function TxEdit(id) {
+    const t = S.tx.find((x) => x.id === Number(id));
+    if (!t) return go("#/");
+    const a = acct(t.acct);
+    view.innerHTML = `${header("Transaction", "#/account/" + t.acct)}
+      ${entryForm(t)}
+      <div class="field"><label for="date">Date</label><input id="date" type="date" value="${esc(t.date)}"></div>
+      <p class="hint">Account: ${esc(a ? a.name : "—")} ••${esc(a ? a.last4 : "")}. The balance updates to match your change.</p>
+      <div class="err" id="err"></div>
+      <button class="pill solid" id="go">Save changes</button>
+      <button class="pill ghost danger" id="del" style="margin-top:12px">Delete transaction</button>`;
+    const getDir = wireSeg();
+    $("#go").addEventListener("click", () => {
+      const amt = parseAmt($("#amt").value), name = $("#name").value.trim();
+      if (!(amt > 0)) return fail("Enter an amount greater than $0.");
+      if (!name) return fail("Add a short description.");
+      const signed = getDir() === "in" ? amt : -amt;
+      if (a) a.balance = round2(a.balance + signed - t.amount);
+      Object.assign(t, { name, amount: signed, cat: $("#cat").value, date: $("#date").value || t.date });
+      sortTx(); save(); toast("Transaction updated"); go("#/account/" + t.acct);
+    });
+    $("#del").addEventListener("click", () => {
+      if (!confirm(`Delete "${t.name}"? The balance will be adjusted.`)) return;
+      if (a) a.balance = round2(a.balance - t.amount);
+      S.tx = S.tx.filter((x) => x !== t);
+      save(); toast("Transaction deleted"); go("#/account/" + t.acct);
     });
   }
 
   function EditBalances() {
     view.innerHTML = `${header("Edit balances")}
-      <p class="hint" style="margin-top:0">Set each account's starting balance for this prototype. A balance adjustment is recorded in the account's history.</p>
+      <p class="hint" style="margin-top:0">Set each balance. The difference is recorded as a balance adjustment. To change figures without adding history, use More → Customize.</p>
       ${S.accounts.map((a) => `
-        <div class="field"><label>${esc(a.name)} •••• ${a.last4}</label>
+        <div class="field"><label>${esc(a.name)} •••• ${esc(a.last4)}</label>
         <input data-id="${a.id}" class="bal" inputmode="decimal" value="${a.balance.toFixed(2)}"></div>`).join("")}
       <div class="err" id="err"></div>
       <button class="pill solid" id="go">Save balances</button>`;
     $("#go").addEventListener("click", () => {
-      const inputs = [...view.querySelectorAll(".bal")];
-      for (const i of inputs) if (isNaN(parseAmt(i.value))) return ($("#err").textContent = "Each balance needs a number.");
+      const inputs = $$(".bal", view);
+      for (const i of inputs) if (isNaN(parseSigned(i.value))) return fail("Each balance needs a number.");
       inputs.forEach((i) => {
-        const a = acct(i.dataset.id), nb = parseAmt(i.value), diff = round2(nb - a.balance);
+        const a = acct(i.dataset.id), nb = parseSigned(i.value), diff = round2(nb - a.balance);
         if (diff !== 0) { a.balance = nb; addTx(a.id, "Balance adjustment", diff, "Adjustment"); }
       });
       save(); toast("Balances updated"); go("#/");
     });
   }
 
+  function acctEditor(a) {
+    return `<div class="panel acct-ed" data-id="${esc(a.id)}">
+      <div class="ed-head"><strong>${esc(a.name || "New account")}</strong><button type="button" class="link-danger" data-del>Remove</button></div>
+      <div class="field"><label>Account name</label><input data-f="name" maxlength="24" value="${esc(a.name)}" placeholder="e.g. Savings"></div>
+      <div class="field"><label>Description</label><input data-f="sub" maxlength="28" value="${esc(a.sub)}" placeholder="e.g. High-interest savings"></div>
+      <div class="grid2">
+        <div class="field"><label>Last 4 digits</label><input data-f="last4" inputmode="numeric" maxlength="4" value="${esc(a.last4)}"></div>
+        <div class="field"><label>Balance</label><input data-f="balance" inputmode="decimal" value="${Number(a.balance).toFixed(2)}"></div>
+      </div>
+      <div class="field"><label>Icon</label><select data-f="kind">${Object.entries(KINDS).map(([k, v]) => `<option value="${k}" ${k === a.kind ? "selected" : ""}>${v[0]}</option>`).join("")}</select></div>
+    </div>`;
+  }
+
+  function Customize() {
+    let logo = S.brand.logo;
+    view.innerHTML = `${header("Customize", "#/more")}
+      <p class="hint" style="margin-top:0">Change the logo, name, colour, account details and figures. Saved on this device — use Export setup under More to share it with your team.</p>
+      <div class="section-title">Brand</div>
+      <div class="panel">
+        <div class="logo-edit">
+          <span class="logo xl" id="logoPrev"></span>
+          <div class="btn-row">
+            <label class="pill soft">Upload logo<input type="file" id="logoFile" accept="image/*" hidden></label>
+            <button class="pill" id="logoReset" type="button">Default</button>
+          </div>
+        </div>
+        <div class="field"><label for="bName">App name</label><input id="bName" maxlength="24" value="${esc(S.brand.name)}"></div>
+        <div class="field"><label for="bColor">Accent colour</label>
+          <div class="color-row">
+            <input type="color" id="bColor" value="${S.brand.color}">
+            <div class="swatches">${SWATCHES.map((c) => `<button type="button" class="swatch" data-c="${c}" style="background:${c}" aria-label="${c}"></button>`).join("")}</div>
+          </div>
+        </div>
+      </div>
+      <div class="section-title">Accounts &amp; figures</div>
+      <div id="acctEds">${S.accounts.map(acctEditor).join("")}</div>
+      <button class="pill ghost" id="addAcct" type="button">+ Add account</button>
+      <div class="err" id="err" style="margin-top:16px"></div>
+      <button class="pill solid" id="go">Save changes</button>`;
+
+    const prev = $("#logoPrev");
+    const paintPrev = () => { prev.innerHTML = logoHTML(logo); prev.classList.toggle("custom", !!logo); };
+    const paintSwatches = () => $$(".swatch", view).forEach((s) => s.classList.toggle("on", s.dataset.c.toLowerCase() === $("#bColor").value.toLowerCase()));
+    paintPrev(); paintSwatches();
+
+    $("#logoFile").addEventListener("change", async (e) => {
+      const f = e.target.files && e.target.files[0]; if (!f) return;
+      try { logo = await readLogo(f); paintPrev(); } catch (err) { toast("Couldn't read that image"); }
+      e.target.value = "";
+    });
+    $("#logoReset").addEventListener("click", () => { logo = null; paintPrev(); });
+    $("#bColor").addEventListener("input", (e) => { applyColor(e.target.value); paintSwatches(); });
+    $$(".swatch", view).forEach((s) => s.addEventListener("click", () => { $("#bColor").value = s.dataset.c; applyColor(s.dataset.c); paintSwatches(); }));
+
+    const eds = $("#acctEds");
+    eds.addEventListener("click", (e) => {
+      if (!e.target.matches("[data-del]")) return;
+      if ($$(".acct-ed", eds).length <= 1) return toast("Keep at least one account");
+      e.target.closest(".acct-ed").remove();
+    });
+    eds.addEventListener("input", (e) => {
+      if (e.target.dataset.f === "name") e.target.closest(".acct-ed").querySelector(".ed-head strong").textContent = e.target.value || "New account";
+      if (e.target.dataset.f === "last4") e.target.value = e.target.value.replace(/\D/g, "").slice(0, 4);
+    });
+    $("#addAcct").addEventListener("click", () => {
+      const last4 = String(Math.floor(1000 + Math.random() * 9000));
+      eds.insertAdjacentHTML("beforeend", acctEditor({ id: "new-" + Date.now(), name: "", sub: "Account", last4, balance: 0, kind: "savings" }));
+      const added = eds.lastElementChild; added.scrollIntoView({ block: "center", behavior: reduceMotion() ? "auto" : "smooth" });
+      added.querySelector('[data-f="name"]').focus({ preventScroll: true });
+    });
+
+    $("#go").addEventListener("click", () => {
+      const name = $("#bName").value.trim();
+      if (!name) return fail("The app needs a name.");
+      const next = [];
+      for (const ed of $$(".acct-ed", eds)) {
+        const g = (f) => ed.querySelector(`[data-f="${f}"]`).value.trim();
+        const nm = g("name"), l4 = g("last4"), bal = parseSigned(g("balance"));
+        if (!nm) return fail("Each account needs a name.");
+        if (!/^\d{4}$/.test(l4)) return fail(`${nm}: the last 4 digits must be 4 numbers.`);
+        if (isNaN(bal)) return fail(`${nm}: the balance needs a number.`);
+        const old = acct(ed.dataset.id);
+        next.push({ id: old ? old.id : "a" + Date.now() + next.length, name: nm, sub: g("sub") || "Account", last4: l4, balance: bal, kind: g("kind") });
+      }
+      const keep = new Set(next.map((a) => a.id));
+      const backup = JSON.stringify(S);
+      S.tx = S.tx.filter((t) => keep.has(t.acct));
+      S.accounts = next;
+      S.brand = { name, logo, color: $("#bColor").value };
+      if (!save()) { S = migrate(JSON.parse(backup)); paintBrand(); return fail("Couldn't save — try a smaller logo image."); }
+      paintBrand(); toast("Changes saved"); go("#/");
+    });
+  }
+
   function More() {
     view.innerHTML = `${header("More")}
-      <div class="section-title">Accounts</div>
+      <div class="section-title">App</div>
       <div class="menu">
-        <button id="addAcct">Add an account <span style="color:var(--muted)">${I.chev.replace("<svg", '<svg width="20" height="20"')}</span></button>
-        <button id="hide">${S.hide ? "Show" : "Hide"} balances</button>
+        <a href="#/customize"><span>Customize<div class="sub">Logo, name, colour, accounts, figures</div></span>${I.chev}</a>
+        <button id="hide" type="button">${S.hide ? "Show" : "Hide"} balances</button>
+      </div>
+      <div class="section-title" style="margin-top:24px">Team</div>
+      <div class="menu">
+        <button id="export" type="button"><span>Export setup<div class="sub">Save a file to share with your team</div></span></button>
+        <label><span>Import setup<div class="sub">Load a file a teammate exported</div></span><input type="file" id="import" accept="application/json,.json" hidden></label>
       </div>
       <div class="section-title" style="margin-top:24px">Prototype</div>
-      <div class="menu">
-        <button id="reset">Reset sample data</button>
-      </div>
-      <p class="proto-note">Corvane prototype · sample data saved on this device only</p>`;
+      <div class="menu"><button id="reset" type="button">Reset sample data</button></div>
+      <p class="proto-note">${esc(S.brand.name)} prototype · sample data saved on this device only</p>`;
     $("#hide").addEventListener("click", () => { S.hide = !S.hide; save(); paintHide(); More(); });
-    $("#reset").addEventListener("click", () => { if (confirm("Reset all sample data?")) { S = seed(); save(); paintHide(); toast("Sample data reset"); go("#/"); } });
-    $("#addAcct").addEventListener("click", () => {
-      const name = (prompt("Account name (e.g. Savings)") || "").trim();
-      if (!name) return;
-      const last4 = String(Math.floor(1000 + Math.random() * 9000));
-      S.accounts.push({ id: "a" + Date.now(), name, kind: /sav/i.test(name) ? "savings" : "other", sub: /sav/i.test(name) ? "Savings account" : "Account", last4, balance: 0 });
-      save(); toast(`${name} added`); go("#/");
+    $("#reset").addEventListener("click", () => {
+      if (!confirm("Reset everything, including the logo and name, to the original sample?")) return;
+      S = seed(); save(); paintHide(); paintBrand(); toast("Sample data reset"); go("#/");
+    });
+    $("#export").addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(S, null, 2)], { type: "application/json" });
+      const u = URL.createObjectURL(blob), a = document.createElement("a");
+      a.href = u; a.download = (S.brand.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "app") + "-setup.json";
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000);
+      toast("Setup exported");
+    });
+    $("#import").addEventListener("change", (e) => {
+      const f = e.target.files && e.target.files[0]; if (!f) return;
+      f.text().then((txt) => {
+        const data = JSON.parse(txt);
+        if (!isValid(data)) throw new Error("bad");
+        S = migrate(data); save(); paintHide(); paintBrand(); toast("Setup imported"); go("#/");
+      }).catch(() => toast("That file isn't a valid setup"));
+      e.target.value = "";
     });
   }
 
   // ---------- Chrome ----------
   function paintHide() { $("#toggleHide").innerHTML = S.hide ? I.eyeOff : I.eye; }
-  $("#toggleHide").addEventListener("click", () => { S.hide = !S.hide; save(); paintHide(); route(); });
+  $("#toggleHide").addEventListener("click", () => { S.hide = !S.hide; save(); paintHide(); route(false); });
 
-  function paintTabs(path) {
-    const tabs = [["#/", "Accounts", I.home], ["#/transfer", "Transfer", I.transfer], ["#/pay", "Pay", I.bill], ["#/more", "More", I.menu]];
-    const active = path === "/" || path.startsWith("/account") || path === "/add" || path === "/edit" ? "#/" : "#" + path;
-    $("#tabbar").innerHTML = tabs.map(([h, l, ic]) => `<a href="${h}" class="${h === active ? "on" : ""}">${ic}${l}</a>`).join("");
+  const TABS = [["#/", "Accounts", I.home], ["#/transfer", "Transfer", I.transfer], ["#/pay", "Pay", I.bill], ["#/more", "More", I.menu]];
+  $("#tabbar").innerHTML = '<span class="tab-ind" id="tabInd"></span>' + TABS.map(([h, l, ic]) => `<a href="${h}">${ic}<span>${l}</span></a>`).join("");
+  const tabIndex = (p) => p === "/transfer" ? 1 : p === "/pay" ? 2 : (p === "/more" || p === "/customize") ? 3 : 0;
+  function paintTabs(i) {
+    $$("#tabbar a").forEach((a, k) => { a.classList.toggle("on", k === i); a.setAttribute("aria-current", k === i ? "page" : "false"); });
+    $("#tabInd").style.transform = `translateX(${i * 100}%)`;
   }
 
+  const topbar = $("#topbar");
+  window.addEventListener("scroll", () => topbar.classList.toggle("scrolled", window.scrollY > 4), { passive: true });
+
+  // ---------- Router with direction-aware transitions ----------
+  const depthOf = (p) => p === "/" ? 0 : (p.startsWith("/tx/") || p === "/customize") ? 2 : 1;
+  let cur = { path: null, depth: 0, tab: 0 };
   function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
-  function route() {
-    const raw = location.hash.slice(1) || "/";
-    const [path, qs] = raw.split("?");
-    const params = new URLSearchParams(qs || "");
-    paintTabs(path);
-    window.scrollTo(0, 0);
+  function dispatch(path, params) {
     if (path === "/") return Home();
-    if (path.startsWith("/account/")) return Account(path.split("/")[2]);
+    if (path.startsWith("/account/")) return Account(decodeURIComponent(path.split("/")[2]));
+    if (path.startsWith("/tx/")) return TxEdit(path.split("/")[2]);
     if (path === "/transfer") return Transfer(params);
     if (path === "/pay") return Pay(params);
     if (path === "/add") return AddEntry(params);
     if (path === "/edit") return EditBalances();
     if (path === "/more") return More();
+    if (path === "/customize") return Customize();
     go("#/");
   }
-  window.addEventListener("hashchange", route);
+  function route(animate) {
+    const raw = location.hash.slice(1) || "/";
+    const [path, qs] = raw.split("?");
+    const params = new URLSearchParams(qs || "");
+    const d = depthOf(path), ti = tabIndex(path);
+    let dir = "fade";
+    if (cur.path !== null) {
+      if (d > cur.depth) dir = "fwd";
+      else if (d < cur.depth) dir = "back";
+      else if (ti !== cur.tab) dir = ti > cur.tab ? "fwd" : "back";
+    }
+    const samePage = cur.path === path;
+    cur = { path, depth: d, tab: ti };
+    document.documentElement.dataset.dir = dir;
+    paintTabs(ti);
+    const render = () => { paintBrand(); if (!samePage) window.scrollTo(0, 0); dispatch(path, params); };
+    if (animate === false || reduceMotion() || cur === null) return render();
+    if (document.startViewTransition) {
+      document.startViewTransition(render);
+    } else {
+      render();
+      view.classList.remove("enter"); void view.offsetWidth; view.classList.add("enter");
+    }
+  }
+  window.addEventListener("hashchange", () => route());
   paintHide();
-  route();
+  paintBrand();
+  route(false);
 })();

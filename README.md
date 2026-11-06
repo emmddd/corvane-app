@@ -11,7 +11,12 @@ A clickable mobile banking app prototype. Plain HTML, CSS and JavaScript — no 
 - **Pay bill** — pay saved payees or add a new one
 - **Add entry** — record money in or out
 - **Edit balances** — set starting balances (logged as adjustments)
-- **More** — add accounts, hide balances, reset sample data
+- **Transaction** — tap any transaction to edit or delete it (balance updates)
+- **More → Customize** — upload a logo, change the app name and accent colour, edit account names, the last 4 digits and balances, add or remove accounts
+- **More → Export / Import setup** — share a customized setup with your team as a file
+
+## Design
+Liquid Glass styling (translucent tab bar, top bar and search with blur and highlights), a sliding tab indicator, direction-aware screen transitions (View Transitions API, with a fallback), animated figures, safe-area support for notch/Dynamic Island, light and dark mode, and reduced-motion support. A small **Demo** label stays on screen because this is a prototype with sample data.
 
 ## Run it
 Open `index.html` in a browser, or serve the folder:
