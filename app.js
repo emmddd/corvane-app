@@ -374,7 +374,7 @@
       </div>
       <div class="section-title">Transactions</div>
       <div class="tx-list">${list.map((t) => txRow(t)).join("") || '<div class="empty">No transactions yet</div>'}</div>
-      ${editMode ? '<p class="hint" style="margin-top:12px">Tap a transaction to edit or delete it.</p>' : ""}`;
+`;
     countUps();
   }
 
