@@ -228,7 +228,6 @@
     $("#brandName").textContent = S.brand.name;
     document.title = S.brand.name;
     const t = document.querySelector('meta[name="apple-mobile-web-app-title"]'); if (t) t.setAttribute("content", S.brand.name);
-    const ic = document.querySelector('link[rel="apple-touch-icon"]'); if (ic) ic.href = S.brand.logo || "icon.svg";
     applyColor(S.brand.color);
   }
 
