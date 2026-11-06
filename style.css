@@ -175,9 +175,9 @@ a { color: inherit; text-decoration: none; }
 .logo.xl svg { width: 48px; height: 48px; }
 .brand-name { font-size: 25px; font-weight: 800; letter-spacing: -.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .demo-chip {
-  flex: none; font-size: 10.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
-  color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 7px; background: var(--card);
+  display: none !important;
 }
+
 .top-actions { display: flex; align-items: center; gap: 12px; flex: none; }
 .icon-btn { width: 46px; height: 46px; padding: 0; cursor: pointer; display: grid; place-items: center; }
 .icon-btn svg { width: 24px; height: 24px; }
