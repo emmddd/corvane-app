@@ -229,6 +229,44 @@
     document.title = S.brand.name;
     const t = document.querySelector('meta[name="apple-mobile-web-app-title"]'); if (t) t.setAttribute("content", S.brand.name);
     applyColor(S.brand.color);
+    paintHomeIcon();
+  }
+  // Home Screen icon + name follow the saved logo and app name (read by the phone when you tap "Add to Home Screen")
+  let iconKey = null, manifestUrl = null;
+  function iconFromLogo(src, n) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement("canvas"); c.width = c.height = n;
+        const x = c.getContext("2d"); x.imageSmoothingQuality = "high";
+        x.fillStyle = "#FFFFFF"; x.fillRect(0, 0, n, n);
+        x.drawImage(img, 0, 0, n, n);
+        resolve(c.toDataURL("image/png"));
+      };
+      img.onerror = () => resolve(null);
+      img.src = src;
+    });
+  }
+  async function paintHomeIcon() {
+    const key = (S.brand.logo || "default") + "|" + S.brand.name + "|" + S.brand.color;
+    if (key === iconKey) return; iconKey = key;
+    let i180 = "apple-touch-icon.png", i192 = "icon-192.png", i512 = "icon-512.png";
+    if (S.brand.logo) {
+      const [a, b, c] = await Promise.all([iconFromLogo(S.brand.logo, 180), iconFromLogo(S.brand.logo, 192), iconFromLogo(S.brand.logo, 512)]);
+      if (key !== iconKey) return;
+      if (a) { i180 = a; i192 = b; i512 = c; }
+    }
+    const link = document.querySelector('link[rel="apple-touch-icon"]'); if (link) link.href = i180;
+    try {
+      const base = location.href.split("#")[0];
+      const abs = (u) => u.startsWith("data:") ? u : new URL(u, base).href;
+      const m = { name: S.brand.name, short_name: S.brand.name, start_url: base, scope: new URL("./", base).href, display: "standalone",
+        background_color: "#FFFFFF", theme_color: S.brand.color,
+        icons: [{ src: abs(i192), sizes: "192x192", type: "image/png" }, { src: abs(i512), sizes: "512x512", type: "image/png", purpose: "any maskable" }] };
+      if (manifestUrl) URL.revokeObjectURL(manifestUrl);
+      manifestUrl = URL.createObjectURL(new Blob([JSON.stringify(m)], { type: "application/manifest+json" }));
+      const ml = document.querySelector('link[rel="manifest"]'); if (ml) ml.href = manifestUrl;
+    } catch (e) {}
   }
 
   // ---------- Views ----------
