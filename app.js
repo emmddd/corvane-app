@@ -70,11 +70,11 @@
         ...defaultCardTx(9)
       ],
       nextId: 20,
-      v: 2
+      v: 3
     };
   }
   function defaultCards() {
-    return [{ id: "cc1", name: "Rewards Card", kind: "credit", sub: "Credit card", last4: "5502", balance: 1245.60, limit: 10000 }];
+    return [{ id: "cc1", name: "Credit", kind: "credit", sub: "Credit card", last4: "5502", balance: 1245.60, limit: 10000 }];
   }
   function defaultCardTx(startId) {
     return [
@@ -101,6 +101,11 @@
         s.tx.sort((x, y) => y.date.localeCompare(x.date) || y.id - x.id);
       }
       s.v = 2;
+    }
+    if (s.v < 3) {
+      const c = s.accounts.find((a) => a.id === "cc1" && a.name === "Rewards Card");
+      if (c) c.name = "Credit";
+      s.v = 3;
     }
     s.accounts.forEach((a) => { if (a.kind === "credit") a.limit = Number(a.limit) > 0 ? Number(a.limit) : 5000; });
     s.hide = !!s.hide;
