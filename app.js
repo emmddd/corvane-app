@@ -90,6 +90,7 @@
   }
 
   // ---------- Helpers ----------
+  let editMode = false;   // unlocked by tapping the profile picture 4 times; resets when the app is reopened
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel, root) => [...(root || document).querySelectorAll(sel)];
   const view = $("#view");
@@ -133,10 +134,11 @@
   }
   function txRow(t, showAcct) {
     const a = acct(t.acct);
-    return `<a class="tx" href="#/tx/${t.id}"><div class="tx-dot">${esc(t.name.charAt(0).toUpperCase())}</div>
+    const tag = editMode ? `a class="tx" href="#/tx/${t.id}"` : 'div class="tx"';
+    return `<${tag}><div class="tx-dot">${esc(t.name.charAt(0).toUpperCase())}</div>
       <div class="tx-main"><div class="tx-name">${esc(t.name)}</div>
       <div class="tx-meta">${prettyDate(t.date)} · ${esc(t.cat)}${showAcct && a ? " · " + esc(a.name) : ""}</div></div>
-      <div class="tx-amt ${t.amount > 0 ? "in" : ""}">${S.hide ? "••••" : (t.amount > 0 ? "+" : "") + fmt(t.amount)}</div></a>`;
+      <div class="tx-amt ${t.amount > 0 ? "in" : ""}">${S.hide ? "••••" : (t.amount > 0 ? "+" : "") + fmt(t.amount)}</div></${editMode ? "a" : "div"}>`;
   }
   const fail = (m) => { const e = $("#err"); e.textContent = m; e.scrollIntoView({ block: "center", behavior: reduceMotion() ? "auto" : "smooth" }); };
 
@@ -210,7 +212,6 @@
         <a href="#/transfer"><span class="q-icon">${I.transfer}</span>Transfer</a>
         <a href="#/pay"><span class="q-icon">${I.bill}</span>Pay bill</a>
         <a href="#/add"><span class="q-icon">${I.plus}</span>Add entry</a>
-        <a href="#/edit"><span class="q-icon">${I.pencil}</span>Edit balances</a>
       </div>
       <div class="section-title">Deposit accounts</div>
       ${S.accounts.map((a) => `
@@ -278,7 +279,7 @@
       </div>
       <div class="section-title">Transactions</div>
       <div class="tx-list">${list.map((t) => txRow(t)).join("") || '<div class="empty">No transactions yet</div>'}</div>
-      <p class="hint" style="margin-top:12px">Tap a transaction to edit or delete it.</p>`;
+      ${editMode ? '<p class="hint" style="margin-top:12px">Tap a transaction to edit or delete it.</p>' : ""}`;
     countUps();
   }
 
@@ -404,25 +405,6 @@
       if (a) a.balance = round2(a.balance - t.amount);
       S.tx = S.tx.filter((x) => x !== t);
       save(); toast("Transaction deleted"); go("#/account/" + t.acct);
-    });
-  }
-
-  function EditBalances() {
-    view.innerHTML = `${header("Edit balances")}
-      <p class="hint" style="margin-top:0">Set each balance. The difference is recorded as a balance adjustment. To change figures without adding history, use More → Customize.</p>
-      ${S.accounts.map((a) => `
-        <div class="field"><label>${esc(a.name)} •••• ${esc(a.last4)}</label>
-        <input data-id="${a.id}" class="bal" inputmode="decimal" value="${a.balance.toFixed(2)}"></div>`).join("")}
-      <div class="err" id="err"></div>
-      <button class="pill solid" id="go">Save balances</button>`;
-    $("#go").addEventListener("click", () => {
-      const inputs = $$(".bal", view);
-      for (const i of inputs) if (isNaN(parseSigned(i.value))) return fail("Each balance needs a number.");
-      inputs.forEach((i) => {
-        const a = acct(i.dataset.id), nb = parseSigned(i.value), diff = round2(nb - a.balance);
-        if (diff !== 0) { a.balance = nb; addTx(a.id, "Balance adjustment", diff, "Adjustment"); }
-      });
-      save(); toast("Balances updated"); go("#/");
     });
   }
 
@@ -588,8 +570,15 @@
     view.innerHTML = `${header("More")}
       <div class="section-title">App</div>
       <div class="menu">
-        <a href="#/customize"><span>Customize<div class="sub">Logo, name, colour, accounts, figures, ads</div></span>${I.chev}</a>
         <button id="hide" type="button">${S.hide ? "Show" : "Hide"} balances</button>
+        <a href="#/help"><span>Help Centre</span>${I.chev}</a>
+        <a href="#/feedback"><span>Provide feedback</span>${I.chev}</a>
+      </div>
+      ${editMode ? `
+      <div class="section-title" style="margin-top:24px">Edit access</div>
+      <div class="menu">
+        <a href="#/customize"><span>Customize<div class="sub">Logo, name, colour, accounts, figures, ads</div></span>${I.chev}</a>
+        <button id="lock" type="button">Turn off edit access</button>
       </div>
       <div class="section-title" style="margin-top:24px">Team</div>
       <div class="menu">
@@ -597,9 +586,11 @@
         <label><span>Import setup<div class="sub">Load a file a teammate exported</div></span><input type="file" id="import" accept="application/json,.json" hidden></label>
       </div>
       <div class="section-title" style="margin-top:24px">Prototype</div>
-      <div class="menu"><button id="reset" type="button">Reset sample data</button></div>
+      <div class="menu"><button id="reset" type="button">Reset sample data</button></div>` : ""}
       <p class="proto-note">Settings are saved on this device.</p>`;
     $("#hide").addEventListener("click", () => { S.hide = !S.hide; save(); paintHide(); More(); });
+    if (!editMode) return;
+    $("#lock").addEventListener("click", () => { editMode = false; toast("Edit access off"); More(); });
     $("#reset").addEventListener("click", () => {
       if (!confirm("Reset everything, including the logo and name, to the original sample?")) return;
       S = seed(); save(); paintHide(); paintBrand(); toast("Sample data reset"); go("#/");
@@ -634,6 +625,21 @@
     $("#tabInd").style.transform = `translateX(${i * 100}%)`;
   }
 
+  // Profile picture: one tap opens More; four quick taps toggle full edit access
+  let taps = 0, tapTimer = null;
+  $("#avatar").addEventListener("click", () => {
+    taps++;
+    clearTimeout(tapTimer);
+    if (taps >= 4) {
+      taps = 0;
+      editMode = !editMode;
+      toast(editMode ? "Edit access on" : "Edit access off");
+      go(editMode ? "#/customize" : "#/");
+      return;
+    }
+    tapTimer = setTimeout(() => { if (taps < 4) go("#/more"); taps = 0; }, 450);
+  });
+
   const topbar = $("#topbar");
   window.addEventListener("scroll", () => topbar.classList.toggle("scrolled", window.scrollY > 4), { passive: true });
 
@@ -644,13 +650,12 @@
   function dispatch(path, params) {
     if (path === "/") return Home();
     if (path.startsWith("/account/")) return Account(decodeURIComponent(path.split("/")[2]));
-    if (path.startsWith("/tx/")) return TxEdit(path.split("/")[2]);
+    if (path.startsWith("/tx/")) return editMode ? TxEdit(path.split("/")[2]) : go("#/");
     if (path === "/transfer") return Transfer(params);
     if (path === "/pay") return Pay(params);
     if (path === "/add") return AddEntry(params);
-    if (path === "/edit") return EditBalances();
     if (path === "/more") return More();
-    if (path === "/customize") return Customize();
+    if (path === "/customize") return editMode ? Customize() : go("#/more");
     if (path === "/help") return Help();
     if (path === "/feedback") return Feedback();
     go("#/");
@@ -673,7 +678,8 @@
     const render = () => { paintBrand(); if (!samePage) window.scrollTo(0, 0); dispatch(path, params); };
     if (animate === false || reduceMotion() || cur === null) return render();
     if (document.startViewTransition) {
-      document.startViewTransition(render);
+      const vt = document.startViewTransition(render);
+      vt.ready.catch(() => {}); vt.finished.catch(() => {});
     } else {
       render();
       view.classList.remove("enter"); void view.offsetWidth; view.classList.add("enter");
