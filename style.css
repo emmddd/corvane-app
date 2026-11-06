@@ -49,6 +49,12 @@
 @keyframes splashIn { from { opacity: 0; transform: scale(.6); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ---------- Credit cards ---------- */
+.credit-meter { height: 8px; border-radius: 999px; background: var(--red-softer); overflow: hidden; margin: -4px 0 10px; }
+.credit-meter span { display: block; height: 100%; border-radius: inherit; background: var(--red); transition: width .8s var(--ease); }
+.credit-row { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+.credit-row b { color: var(--ink); font-weight: 700; }
+
 /* ---------- Offers carousel ---------- */
 .offers {
   display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory;

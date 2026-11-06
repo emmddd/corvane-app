@@ -23,7 +23,7 @@
     menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>'
   };
   const KINDS = { chequing: ["Chequing", I.wallet], savings: ["Savings", I.piggy], credit: ["Credit card", I.card], invest: ["Investments", I.chart], other: ["Other", I.layers] };
-  const CATS = ["Groceries", "Dining", "Transport", "Shopping", "Bills", "Bill payment", "Income", "Transfer", "Adjustment", "Other"];
+  const CATS = ["Groceries", "Dining", "Transport", "Shopping", "Bills", "Bill payment", "Income", "Transfer", "Payment", "Adjustment", "Other"];
   const SWATCHES = ["#C62D33", "#1F3864", "#0A7C6E", "#5B3FD0", "#D9822B", "#1C1C1E"];
   const DEFAULT_LOGO = '<svg viewBox="0 0 24 24"><path d="M16.5 8.2A5.5 5.5 0 1 0 16.5 15.8" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/><circle cx="18.6" cy="9.9" r="1.3" fill="#fff"/><circle cx="18.6" cy="14.1" r="1.3" fill="#fff"/></svg>';
   const DEFAULT_BRAND = { name: "Corvane", logo: null, color: "#C62D33" };
@@ -54,7 +54,8 @@
       lending: { ...DEFAULT_LENDING },
       accounts: [
         { id: "chq", name: "Chequing", kind: "chequing", sub: "Everyday account", last4: "4821", balance: 3842.17 },
-        { id: "oth", name: "Other", kind: "other", sub: "Account", last4: "7390", balance: 12650.00 }
+        { id: "oth", name: "Other", kind: "other", sub: "Account", last4: "7390", balance: 12650.00 },
+        ...defaultCards()
       ],
       payees: ["Hydro One", "Rogers", "Enbridge Gas", "City of Mississauga – Property Tax", "Visa Card"],
       tx: [
@@ -65,10 +66,24 @@
         { id: 5, acct: "oth", name: "Interest", amount: 21.08, date: daysAgo(5), cat: "Income" },
         { id: 6, acct: "chq", name: "Petro-Canada", amount: -58.10, date: daysAgo(6), cat: "Transport" },
         { id: 7, acct: "oth", name: "Transfer from Chequing", amount: 500.00, date: daysAgo(9), cat: "Transfer" },
-        { id: 8, acct: "chq", name: "Transfer to Other", amount: -500.00, date: daysAgo(9), cat: "Transfer" }
+        { id: 8, acct: "chq", name: "Transfer to Other", amount: -500.00, date: daysAgo(9), cat: "Transfer" },
+        ...defaultCardTx(9)
       ],
-      nextId: 9
+      nextId: 20,
+      v: 2
     };
+  }
+  function defaultCards() {
+    return [{ id: "cc1", name: "Rewards Card", kind: "credit", sub: "Credit card", last4: "5502", balance: 1245.60, limit: 10000 }];
+  }
+  function defaultCardTx(startId) {
+    return [
+      { name: "Best Buy", amount: -899.99, d: 2, cat: "Shopping" },
+      { name: "Shell", amount: -62.45, d: 3, cat: "Transport" },
+      { name: "Netflix", amount: -20.99, d: 4, cat: "Bills" },
+      { name: "Payment — thank you", amount: 500.00, d: 8, cat: "Payment" },
+      { name: "Uber Eats", amount: -34.17, d: 10, cat: "Dining" }
+    ].map((t, i) => ({ id: startId + i, acct: "cc1", name: t.name, amount: t.amount, date: daysAgo(t.d), cat: t.cat }));
   }
   function isValid(s) { return s && Array.isArray(s.accounts) && s.accounts.length > 0 && Array.isArray(s.tx); }
   function migrate(s) {
@@ -79,6 +94,15 @@
     s.lending = Object.assign({}, DEFAULT_LENDING, s.lending || {});
     s.accounts.forEach((a) => { a.kind = KINDS[a.kind] ? a.kind : "other"; a.balance = Number(a.balance) || 0; a.last4 = String(a.last4 || "0000"); });
     s.nextId = s.nextId || s.tx.reduce((m, t) => Math.max(m, t.id), 0) + 1;
+    if (!s.v || s.v < 2) {
+      if (!s.accounts.some((a) => a.kind === "credit")) {
+        s.accounts.push(...defaultCards());
+        s.tx.push(...defaultCardTx(s.nextId)); s.nextId += 10;
+        s.tx.sort((x, y) => y.date.localeCompare(x.date) || y.id - x.id);
+      }
+      s.v = 2;
+    }
+    s.accounts.forEach((a) => { if (a.kind === "credit") a.limit = Number(a.limit) > 0 ? Number(a.limit) : 5000; });
     s.hide = !!s.hide;
     return s;
   }
@@ -98,7 +122,12 @@
   const money = (n) => S.hide ? '<span class="hidden-amt">$••••••</span>' : fmt(n);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const acct = (id) => S.accounts.find((a) => a.id === id);
-  const total = () => round2(S.accounts.reduce((s, a) => s + a.balance, 0));
+  const isCard = (a) => a && a.kind === "credit";
+  const deposits = () => S.accounts.filter((a) => !isCard(a));
+  const cards = () => S.accounts.filter(isCard);
+  // Cards hold the amount owed: spending raises it, payments lower it
+  const applyAmt = (a, signed) => { a.balance = round2(a.balance + (isCard(a) ? -signed : signed)); };
+  const total = () => round2(deposits().reduce((s, a) => s + a.balance, 0));
   const round2 = (n) => Math.round(n * 100) / 100;
   const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const parseAmt = (v) => { const n = parseFloat(String(v).replace(/[^0-9.]/g, "")); return isFinite(n) ? round2(n) : NaN; };
@@ -121,8 +150,8 @@
     sortTx();
   }
   function sortTx() { S.tx.sort((x, y) => y.date.localeCompare(x.date) || y.id - x.id); }
-  function acctOptions(selected, exclude) {
-    return S.accounts.filter((a) => a.id !== exclude).map((a) =>
+  function acctOptions(selected, exclude, list) {
+    return (list || S.accounts).filter((a) => a.id !== exclude).map((a) =>
       `<option value="${a.id}" ${a.id === selected ? "selected" : ""}>${esc(a.name)} ••${esc(a.last4)} — ${S.hide ? "hidden" : fmt(a.balance)}</option>`).join("");
   }
   function catOptions(sel) {
@@ -199,6 +228,28 @@
   }
 
   // ---------- Views ----------
+  function creditInfo(a) {
+    const limit = Number(a.limit) || 0, owed = Math.max(0, a.balance), avail = round2(Math.max(0, limit - owed));
+    const pct = limit ? Math.min(100, Math.round((owed / limit) * 100)) : 0;
+    return `<div class="credit-meter" aria-hidden="true"><span style="width:${S.hide ? 0 : pct}%"></span></div>
+      <div class="credit-row"><span>Available credit <b>${money(avail)}</b></span><span>Limit ${money(limit)}</span></div>`;
+  }
+  function cardBlock(a) {
+    return `<div class="acct">
+      <a class="acct-head" href="#/account/${a.id}">
+        <span class="acct-icon">${KINDS.credit[1]}</span>
+        <span><div class="acct-name">${esc(a.name)}</div><div class="acct-sub">${esc(a.sub)} · <span class="nw">•••• ${esc(a.last4)}</span></div></span>
+        <span class="chev">${I.chev}</span>
+      </a>
+      <span class="label">Current balance</span>
+      <div class="acct-bal" data-key="acct-${a.id}" data-val="${a.balance}">${money(a.balance)}</div>
+      ${creditInfo(a)}
+      <div class="btn-row">
+        <a class="pill soft" href="#/pay?card=${a.id}">Pay card</a>
+        <a class="pill" href="#/add?acct=${a.id}">Add entry</a>
+      </div>
+    </div>`;
+  }
   function Home(q) {
     const query = (q || "").trim().toLowerCase();
     const results = query ? S.tx.filter((t) => (t.name + " " + t.cat).toLowerCase().includes(query)) : [];
@@ -213,8 +264,8 @@
         <a href="#/pay"><span class="q-icon">${I.bill}</span>Pay bill</a>
         <a href="#/add"><span class="q-icon">${I.plus}</span>Add entry</a>
       </div>
-      <div class="section-title">Deposit accounts</div>
-      ${S.accounts.map((a) => `
+      <div class="section-title">DEPOSIT ACCOUNTS</div>
+      ${deposits().map((a) => `
         <div class="acct">
           <a class="acct-head" href="#/account/${a.id}">
             <span class="acct-icon">${KINDS[a.kind][1]}</span>
@@ -228,6 +279,7 @@
             <a class="pill" href="#/add?acct=${a.id}">Add entry</a>
           </div>
         </div>`).join("")}
+      ${cards().length ? `<div class="section-title" style="margin-top:26px">CREDIT CARDS</div>${cards().map(cardBlock).join("")}` : ""}
       ${S.ads.length ? `
       <div class="section-title" style="margin-top:26px">Offers for you</div>
       <div class="offers" id="offers">${S.ads.map((ad) => `
@@ -269,11 +321,12 @@
     view.innerHTML = `${header(a.name)}
       <div class="acct">
         <div class="acct-sub">${esc(a.sub)} · <span class="nw">•••• ${esc(a.last4)}</span></div>
-        <span class="label">Available balance</span>
+        <span class="label">${isCard(a) ? "Current balance" : "Available balance"}</span>
         <div class="acct-bal" data-key="acct-${a.id}" data-val="${a.balance}">${money(a.balance)}</div>
+        ${isCard(a) ? creditInfo(a) : ""}
         <div class="btn-row">
-          <a class="pill soft" href="#/transfer?from=${a.id}">Transfer</a>
-          <a class="pill" href="#/pay?from=${a.id}">Pay bill</a>
+          ${isCard(a) ? `<a class="pill soft" href="#/pay?card=${a.id}">Pay card</a>` : `<a class="pill soft" href="#/transfer?from=${a.id}">Transfer</a>
+          <a class="pill" href="#/pay?from=${a.id}">Pay bill</a>`}
           <a class="pill" href="#/add?acct=${a.id}">Add entry</a>
         </div>
       </div>
@@ -284,22 +337,23 @@
   }
 
   function Transfer(params) {
-    if (S.accounts.length < 2) {
+    const dep = deposits();
+    if (dep.length < 2) {
       view.innerHTML = header("Transfer") + '<div class="empty">Add a second account under More → Customize to make transfers.</div>';
       return;
     }
-    const from = acct(params.get("from")) ? params.get("from") : S.accounts[0].id;
-    const to = S.accounts.find((a) => a.id !== from).id;
+    const from = dep.some((a) => a.id === params.get("from")) ? params.get("from") : dep[0].id;
+    const to = dep.find((a) => a.id !== from).id;
     view.innerHTML = `${header("Transfer")}
       <div class="field"><label for="amt">Amount</label><input class="amount-input" id="amt" inputmode="decimal" placeholder="$0.00"></div>
-      <div class="field"><label for="from">From</label><select id="from">${acctOptions(from)}</select></div>
-      <div class="field"><label for="to">To</label><select id="to">${acctOptions(to, from)}</select></div>
+      <div class="field"><label for="from">From</label><select id="from">${acctOptions(from, null, dep)}</select></div>
+      <div class="field"><label for="to">To</label><select id="to">${acctOptions(to, from, dep)}</select></div>
       <div class="field"><label for="note">Note (optional)</label><input id="note" maxlength="40" placeholder="e.g. Rent savings"></div>
       <div class="err" id="err"></div>
       <button class="pill solid" id="go">Transfer</button>`;
     $("#from").addEventListener("change", (e) => {
       const f = e.target.value, keep = $("#to").value;
-      $("#to").innerHTML = acctOptions(keep !== f ? keep : S.accounts.find((a) => a.id !== f).id, f);
+      $("#to").innerHTML = acctOptions(keep !== f ? keep : dep.find((a) => a.id !== f).id, f, dep);
     });
     $("#go").addEventListener("click", () => {
       const amt = parseAmt($("#amt").value), f = acct($("#from").value), t = acct($("#to").value);
@@ -314,15 +368,17 @@
   }
 
   function Pay(params) {
-    const from = acct(params.get("from")) ? params.get("from") : S.accounts[0].id;
-    view.innerHTML = `${header("Pay bill")}
-      <div class="field"><label for="payee">Payee</label><select id="payee">${S.payees.map((p) => `<option>${esc(p)}</option>`).join("")}<option value="__new">+ Add a payee…</option></select></div>
+    const dep = deposits(), cardSel = params.get("card");
+    const from = dep.some((a) => a.id === params.get("from")) ? params.get("from") : dep[0].id;
+    const cardOpts = cards().map((c) => `<option value="card:${c.id}" ${c.id === cardSel ? "selected" : ""}>${esc(c.name)} ••${esc(c.last4)}${S.hide ? "" : " — owing " + fmt(c.balance)}</option>`).join("");
+    view.innerHTML = `${header(cardSel ? "Pay card" : "Pay bill")}
+      <div class="field"><label for="payee">Payee</label><select id="payee">${cardOpts ? `<optgroup label="Your credit cards">${cardOpts}</optgroup><optgroup label="Payees">` : ""}${S.payees.map((p) => `<option ${!cardSel && p === S.payees[0] ? "selected" : ""}>${esc(p)}</option>`).join("")}<option value="__new">+ Add a payee…</option>${cardOpts ? "</optgroup>" : ""}</select></div>
       <div class="field" id="newPayeeWrap" hidden><label for="newPayee">New payee name</label><input id="newPayee" maxlength="40"></div>
       <div class="field"><label for="amt">Amount</label><input class="amount-input" id="amt" inputmode="decimal" placeholder="$0.00"></div>
-      <div class="field"><label for="from">From</label><select id="from">${acctOptions(from)}</select></div>
+      <div class="field"><label for="from">From</label><select id="from">${acctOptions(from, null, dep)}</select></div>
       <div class="field"><label for="date">Date</label><input id="date" type="date" value="${today()}"></div>
       <div class="err" id="err"></div>
-      <button class="pill solid" id="go">Pay bill</button>`;
+      <button class="pill solid" id="go">Pay</button>`;
     if (!S.payees.length) $("#newPayeeWrap").hidden = false;
     $("#payee").addEventListener("change", (e) => { $("#newPayeeWrap").hidden = e.target.value !== "__new"; });
     $("#go").addEventListener("click", () => {
@@ -334,9 +390,18 @@
       const amt = parseAmt($("#amt").value), f = acct($("#from").value);
       if (!(amt > 0)) return fail("Enter an amount greater than $0.");
       if (amt > f.balance) return fail(`That's more than the ${f.name} balance.`);
+      const date = $("#date").value || today();
+      if (payee.startsWith("card:")) {
+        const c = acct(payee.slice(5));
+        f.balance = round2(f.balance - amt);
+        addTx(f.id, `${c.name} payment`, -amt, "Payment", date);
+        applyAmt(c, amt);
+        addTx(c.id, "Payment — thank you", amt, "Payment", date);
+        save(); toast(`Paid ${fmt(amt)} to ${c.name}`); return go("#/account/" + c.id);
+      }
       if (!S.payees.includes(payee)) S.payees.push(payee);
       f.balance = round2(f.balance - amt);
-      addTx(f.id, payee, -amt, "Bill payment", $("#date").value || today());
+      addTx(f.id, payee, -amt, "Bill payment", date);
       save(); toast(`Paid ${fmt(amt)} to ${payee}`); go("#/");
     });
   }
@@ -373,7 +438,7 @@
       if (!(amt > 0)) return fail("Enter an amount greater than $0.");
       if (!name) return fail("Add a short description.");
       const signed = getDir() === "in" ? amt : -amt;
-      a.balance = round2(a.balance + signed);
+      applyAmt(a, signed);
       addTx(a.id, name, signed, $("#cat").value, $("#date").value || today());
       save(); toast("Entry saved"); go("#/account/" + a.id);
     });
@@ -396,13 +461,13 @@
       if (!(amt > 0)) return fail("Enter an amount greater than $0.");
       if (!name) return fail("Add a short description.");
       const signed = getDir() === "in" ? amt : -amt;
-      if (a) a.balance = round2(a.balance + signed - t.amount);
+      if (a) applyAmt(a, signed - t.amount);
       Object.assign(t, { name, amount: signed, cat: $("#cat").value, date: $("#date").value || t.date });
       sortTx(); save(); toast("Transaction updated"); go("#/account/" + t.acct);
     });
     $("#del").addEventListener("click", () => {
       if (!confirm(`Delete "${t.name}"? The balance will be adjusted.`)) return;
-      if (a) a.balance = round2(a.balance - t.amount);
+      if (a) applyAmt(a, -t.amount);
       S.tx = S.tx.filter((x) => x !== t);
       save(); toast("Transaction deleted"); go("#/account/" + t.acct);
     });
@@ -415,9 +480,10 @@
       <div class="field"><label>Description</label><input data-f="sub" maxlength="28" value="${esc(a.sub)}" placeholder="e.g. High-interest savings"></div>
       <div class="grid2">
         <div class="field"><label>Last 4 digits</label><input data-f="last4" inputmode="numeric" maxlength="4" value="${esc(a.last4)}"></div>
-        <div class="field"><label>Balance</label><input data-f="balance" inputmode="decimal" value="${Number(a.balance).toFixed(2)}"></div>
+        <div class="field"><label>Balance (owed, for cards)</label><input data-f="balance" inputmode="decimal" value="${Number(a.balance).toFixed(2)}"></div>
       </div>
-      <div class="field"><label>Icon</label><select data-f="kind">${Object.entries(KINDS).map(([k, v]) => `<option value="${k}" ${k === a.kind ? "selected" : ""}>${v[0]}</option>`).join("")}</select></div>
+      <div class="field"><label>Credit limit (cards only)</label><input data-f="limit" inputmode="decimal" value="${a.limit ? Number(a.limit).toFixed(2) : ""}" placeholder="e.g. 10000"></div>
+      <div class="field"><label>Type</label><select data-f="kind">${Object.entries(KINDS).map(([k, v]) => `<option value="${k}" ${k === a.kind ? "selected" : ""}>${v[0]}</option>`).join("")}</select></div>
     </div>`;
   }
 
@@ -484,6 +550,8 @@
     eds.addEventListener("click", (e) => {
       if (!e.target.matches("[data-del]")) return;
       if ($$(".acct-ed", eds).length <= 1) return toast("Keep at least one account");
+      const others = $$(".acct-ed", eds).filter((x) => x !== e.target.closest(".acct-ed"));
+      if (!others.some((x) => x.querySelector('[data-f="kind"]').value !== "credit")) return toast("Keep at least one deposit account");
       e.target.closest(".acct-ed").remove();
     });
     eds.addEventListener("input", (e) => {
@@ -526,8 +594,11 @@
         if (!/^\d{4}$/.test(l4)) return fail(`${nm}: the last 4 digits must be 4 numbers.`);
         if (isNaN(bal)) return fail(`${nm}: the balance needs a number.`);
         const old = acct(ed.dataset.id);
-        next.push({ id: old ? old.id : "a" + Date.now() + next.length, name: nm, sub: g("sub") || "Account", last4: l4, balance: bal, kind: g("kind") });
+        const kind = g("kind"), lim = parseAmt(g("limit"));
+        if (kind === "credit" && !(lim > 0)) return fail(`${nm}: enter a credit limit.`);
+        next.push({ id: old ? old.id : "a" + Date.now() + next.length, name: nm, sub: g("sub") || (kind === "credit" ? "Credit card" : "Account"), last4: l4, balance: bal, kind, ...(kind === "credit" ? { limit: lim } : {}) });
       }
+      if (!next.some((a) => a.kind !== "credit")) return fail("Keep at least one deposit account.");
       const keep = new Set(next.map((a) => a.id));
       const backup = JSON.stringify(S);
       S.tx = S.tx.filter((t) => keep.has(t.acct));
