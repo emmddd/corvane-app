@@ -243,7 +243,6 @@
       <div class="help-zone">
         <a href="#/help">Help Centre ${I.chev}</a>
         <a href="#/feedback">Provide feedback ${I.chev}</a>
-        <p class="foot-note">${esc(S.brand.name)} · Demo app with sample data</p>
       </div>`}
     `;
     const off = $("#offers");
@@ -599,7 +598,7 @@
       </div>
       <div class="section-title" style="margin-top:24px">Prototype</div>
       <div class="menu"><button id="reset" type="button">Reset sample data</button></div>
-      <p class="proto-note">${esc(S.brand.name)} prototype · sample data saved on this device only</p>`;
+      <p class="proto-note">Settings are saved on this device.</p>`;
     $("#hide").addEventListener("click", () => { S.hide = !S.hide; save(); paintHide(); More(); });
     $("#reset").addEventListener("click", () => {
       if (!confirm("Reset everything, including the logo and name, to the original sample?")) return;
@@ -684,4 +683,16 @@
   paintHide();
   paintBrand();
   route(false);
+
+  // ---------- Opening splash: blurred app, logo in the middle, spinner below ----------
+  const splash = $("#splash");
+  if (splash) {
+    const sl = $("#splashLogo");
+    sl.innerHTML = logoHTML(S.brand.logo); sl.classList.toggle("custom", !!S.brand.logo);
+    const hold = reduceMotion() ? 500 : 1900;
+    setTimeout(() => {
+      splash.classList.add("hide");
+      setTimeout(() => splash.remove(), 700);
+    }, hold);
+  }
 })();
