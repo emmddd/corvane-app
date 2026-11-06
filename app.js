@@ -27,6 +27,18 @@
   const SWATCHES = ["#C62D33", "#1F3864", "#0A7C6E", "#5B3FD0", "#D9822B", "#1C1C1E"];
   const DEFAULT_LOGO = '<svg viewBox="0 0 24 24"><path d="M16.5 8.2A5.5 5.5 0 1 0 16.5 15.8" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"/><circle cx="18.6" cy="9.9" r="1.3" fill="#fff"/><circle cx="18.6" cy="14.1" r="1.3" fill="#fff"/></svg>';
   const DEFAULT_BRAND = { name: "Corvane", logo: null, color: "#C62D33" };
+  const defaultAds = () => [
+    { id: "ad1", tag: "New", title: "Earn more on your savings", body: "Open a high-interest savings account in minutes and watch your money grow.", cta: "Open an account" },
+    { id: "ad2", tag: "Insights", title: "See where your money goes", body: "Compare your monthly spending with your income using simple charts.", cta: "Try Insights" },
+    { id: "ad3", tag: "Rewards", title: "Cash back on everyday purchases", body: "Get money back on groceries, gas and bills with the rewards card.", cta: "Learn more" }
+  ];
+  const DEFAULT_LENDING = { heading: "Lending accounts", text: "Thinking about your first home? Explore mortgage options built around you." };
+  const DEFAULT_FAQS = [
+    ["How do I move money between accounts?", "Tap Transfer, enter an amount, choose the From and To accounts, then tap Transfer."],
+    ["How do I pay a bill?", "Tap Pay bill, pick a saved payee or add a new one, enter the amount and date, then tap Pay bill."],
+    ["Can I hide my balances?", "Yes. Tap the eye icon at the top of the screen to hide or show all balances."],
+    ["How do I change an entry?", "Open an account, tap the transaction, then edit or delete it. The balance updates automatically."]
+  ];
 
   // ---------- State ----------
   const KEY = "corvane-proto-v1";
@@ -38,6 +50,8 @@
     return {
       hide: false,
       brand: { ...DEFAULT_BRAND },
+      ads: defaultAds(),
+      lending: { ...DEFAULT_LENDING },
       accounts: [
         { id: "chq", name: "Chequing", kind: "chequing", sub: "Everyday account", last4: "4821", balance: 3842.17 },
         { id: "oth", name: "Other", kind: "other", sub: "Account", last4: "7390", balance: 12650.00 }
@@ -61,6 +75,8 @@
     s.brand = Object.assign({}, DEFAULT_BRAND, s.brand || {});
     if (!/^#[0-9a-f]{6}$/i.test(s.brand.color)) s.brand.color = DEFAULT_BRAND.color;
     s.payees = Array.isArray(s.payees) ? s.payees : [];
+    s.ads = Array.isArray(s.ads) ? s.ads : defaultAds();
+    s.lending = Object.assign({}, DEFAULT_LENDING, s.lending || {});
     s.accounts.forEach((a) => { a.kind = KINDS[a.kind] ? a.kind : "other"; a.balance = Number(a.balance) || 0; a.last4 = String(a.last4 || "0000"); });
     s.nextId = s.nextId || s.tx.reduce((m, t) => Math.max(m, t.id), 0) + 1;
     s.hide = !!s.hide;
@@ -211,9 +227,36 @@
             <a class="pill" href="#/add?acct=${a.id}">Add entry</a>
           </div>
         </div>`).join("")}
-      <div class="section-title" style="margin-top:26px">Recent activity</div>
-      <div class="tx-list">${S.tx.slice(0, 5).map((t) => txRow(t, true)).join("") || '<div class="empty">No transactions yet</div>'}</div>`}
+      ${S.ads.length ? `
+      <div class="section-title" style="margin-top:26px">Offers for you</div>
+      <div class="offers" id="offers">${S.ads.map((ad) => `
+        <article class="offer">
+          ${ad.tag ? `<span class="offer-tag">${esc(ad.tag)}</span>` : ""}
+          <h3>${esc(ad.title)}</h3>
+          <p>${esc(ad.body)}</p>
+          ${ad.cta ? `<button class="offer-cta" type="button">${esc(ad.cta)} ${I.chev}</button>` : ""}
+        </article>`).join("")}</div>
+      ${S.ads.length > 1 ? `<div class="dots" id="dots">${S.ads.map((_, i) => `<span class="${i === 0 ? "on" : ""}"></span>`).join("")}</div>` : '<div style="height:24px"></div>'}` : ""}
+      ${S.lending.text ? `
+      <div class="section-title">${esc(S.lending.heading || "Lending accounts")}</div>
+      <button class="promo" type="button" id="promo"><span class="promo-plus">${I.plus}</span><span>${esc(S.lending.text)}</span></button>` : ""}
+      <div class="help-zone">
+        <a href="#/help">Help Centre ${I.chev}</a>
+        <a href="#/feedback">Provide feedback ${I.chev}</a>
+        <p class="foot-note">${esc(S.brand.name)} · Demo app with sample data</p>
+      </div>`}
     `;
+    const off = $("#offers");
+    if (off) {
+      const dots = $$("#dots span");
+      off.addEventListener("scroll", () => {
+        const step = (off.firstElementChild ? off.firstElementChild.offsetWidth : off.clientWidth) + 12;
+        const i = Math.round(off.scrollLeft / step);
+        dots.forEach((d, k) => d.classList.toggle("on", k === i));
+      }, { passive: true });
+      $$(".offer-cta", off).forEach((b) => b.addEventListener("click", () => toast("Offer details coming soon")));
+    }
+    const pr = $("#promo"); if (pr) pr.addEventListener("click", () => toast("Lending options coming soon"));
     const s = $("#search");
     s.addEventListener("input", () => { const pos = s.selectionStart; Home(s.value); const n = $("#search"); n.focus(); n.setSelectionRange(pos, pos); });
     countUps();
@@ -397,6 +440,16 @@
     </div>`;
   }
 
+  function adEditor(ad) {
+    return `<div class="panel ad-ed acct-ed">
+      <div class="ed-head"><strong>${esc(ad.title || "New advertisement")}</strong><button type="button" class="link-danger" data-del-ad>Remove</button></div>
+      <div class="field"><label>Label (optional)</label><input data-a="tag" maxlength="16" value="${esc(ad.tag || "")}" placeholder="e.g. New"></div>
+      <div class="field"><label>Headline</label><input data-a="title" maxlength="50" value="${esc(ad.title || "")}"></div>
+      <div class="field"><label>Text</label><textarea data-a="body" maxlength="160" style="min-height:90px">${esc(ad.body || "")}</textarea></div>
+      <div class="field"><label>Button text (optional)</label><input data-a="cta" maxlength="24" value="${esc(ad.cta || "")}" placeholder="e.g. Learn more"></div>
+    </div>`;
+  }
+
   function Customize() {
     let logo = S.brand.logo;
     view.innerHTML = `${header("Customize", "#/more")}
@@ -421,6 +474,14 @@
       <div class="section-title">Accounts &amp; figures</div>
       <div id="acctEds">${S.accounts.map(acctEditor).join("")}</div>
       <button class="pill ghost" id="addAcct" type="button">+ Add account</button>
+      <div class="section-title" style="margin-top:28px">Advertisements</div>
+      <div id="adEds">${S.ads.map(adEditor).join("")}</div>
+      <button class="pill ghost" id="addAd" type="button">+ Add advertisement</button>
+      <div class="section-title" style="margin-top:28px">Lending promo</div>
+      <div class="panel">
+        <div class="field"><label for="lHead">Section heading</label><input id="lHead" maxlength="30" value="${esc(S.lending.heading)}"></div>
+        <div class="field"><label for="lText">Promo text (leave empty to hide)</label><textarea id="lText" maxlength="160" style="min-height:90px">${esc(S.lending.text)}</textarea></div>
+      </div>
       <div class="err" id="err" style="margin-top:16px"></div>
       <button class="pill solid" id="go">Save changes</button>`;
 
@@ -455,7 +516,25 @@
       added.querySelector('[data-f="name"]').focus({ preventScroll: true });
     });
 
+    const adEds = $("#adEds");
+    adEds.addEventListener("click", (e) => { if (e.target.matches("[data-del-ad]")) e.target.closest(".ad-ed").remove(); });
+    adEds.addEventListener("input", (e) => {
+      if (e.target.dataset.a === "title") e.target.closest(".ad-ed").querySelector(".ed-head strong").textContent = e.target.value || "New advertisement";
+    });
+    $("#addAd").addEventListener("click", () => {
+      adEds.insertAdjacentHTML("beforeend", adEditor({ tag: "", title: "", body: "", cta: "Learn more" }));
+      const added = adEds.lastElementChild; added.scrollIntoView({ block: "center", behavior: reduceMotion() ? "auto" : "smooth" });
+      added.querySelector('[data-a="title"]').focus({ preventScroll: true });
+    });
+
     $("#go").addEventListener("click", () => {
+      const ads = [];
+      for (const ed of $$(".ad-ed", adEds)) {
+        const g = (f) => ed.querySelector(`[data-a="${f}"]`).value.trim();
+        if (!g("title") && !g("body")) continue;
+        if (!g("title")) return fail("Each advertisement needs a headline.");
+        ads.push({ id: "ad" + Date.now() + ads.length, tag: g("tag"), title: g("title"), body: g("body"), cta: g("cta") });
+      }
       const name = $("#bName").value.trim();
       if (!name) return fail("The app needs a name.");
       const next = [];
@@ -473,8 +552,36 @@
       S.tx = S.tx.filter((t) => keep.has(t.acct));
       S.accounts = next;
       S.brand = { name, logo, color: $("#bColor").value };
+      S.ads = ads;
+      S.lending = { heading: $("#lHead").value.trim() || "Lending accounts", text: $("#lText").value.trim() };
       if (!save()) { S = migrate(JSON.parse(backup)); paintBrand(); return fail("Couldn't save — try a smaller logo image."); }
       paintBrand(); toast("Changes saved"); go("#/");
+    });
+  }
+
+  function Help() {
+    view.innerHTML = `${header("Help Centre")}
+      <p class="hint" style="margin-top:0">Answers to common questions about using ${esc(S.brand.name)}.</p>
+      ${DEFAULT_FAQS.map(([q, a]) => `<details class="faq"><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join("")}
+      <a class="pill ghost" href="#/feedback" style="margin-top:14px">Still need help? Send us a message</a>`;
+  }
+
+  function Feedback() {
+    let rating = 0;
+    view.innerHTML = `${header("Provide feedback")}
+      <p class="hint" style="margin-top:0">Tell us what you think of the app.</p>
+      <div class="field"><label>How would you rate it?</label>
+        <div class="btn-row" id="stars">${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="pill" data-n="${n}" style="padding:10px 16px">${n}</button>`).join("")}</div></div>
+      <div class="field"><label for="fb">Comments</label><textarea id="fb" maxlength="600" placeholder="What's working well? What could be better?"></textarea></div>
+      <div class="err" id="err"></div>
+      <button class="pill solid" id="go">Send feedback</button>`;
+    $$("#stars button", view).forEach((b) => b.addEventListener("click", () => {
+      rating = Number(b.dataset.n);
+      $$("#stars button", view).forEach((x) => x.classList.toggle("soft", Number(x.dataset.n) <= rating));
+    }));
+    $("#go").addEventListener("click", () => {
+      if (!rating && !$("#fb").value.trim()) return fail("Pick a rating or write a comment.");
+      toast("Thanks for your feedback"); go("#/");
     });
   }
 
@@ -482,7 +589,7 @@
     view.innerHTML = `${header("More")}
       <div class="section-title">App</div>
       <div class="menu">
-        <a href="#/customize"><span>Customize<div class="sub">Logo, name, colour, accounts, figures</div></span>${I.chev}</a>
+        <a href="#/customize"><span>Customize<div class="sub">Logo, name, colour, accounts, figures, ads</div></span>${I.chev}</a>
         <button id="hide" type="button">${S.hide ? "Show" : "Hide"} balances</button>
       </div>
       <div class="section-title" style="margin-top:24px">Team</div>
@@ -545,6 +652,8 @@
     if (path === "/edit") return EditBalances();
     if (path === "/more") return More();
     if (path === "/customize") return Customize();
+    if (path === "/help") return Help();
+    if (path === "/feedback") return Feedback();
     go("#/");
   }
   function route(animate) {
