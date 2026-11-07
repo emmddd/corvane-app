@@ -9,7 +9,6 @@ A clickable mobile banking app prototype. Plain HTML, CSS and JavaScript — no 
 - **Account detail** — balance and transaction history
 - **Transfer** — move money between your accounts
 - **Pay bill** — pay saved payees or add a new one
-- **Add entry** — record money in or out
 - **Edit balances** — set starting balances (logged as adjustments)
 - **Transaction** — tap any transaction to edit or delete it (balance updates)
 - **More → Customize** — upload a logo, change the app name and accent colour, edit account names, the last 4 digits and balances, add or remove accounts

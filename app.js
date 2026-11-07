@@ -288,7 +288,6 @@
       ${creditInfo(a)}
       <div class="btn-row">
         <a class="pill soft" href="#/pay?card=${a.id}">Pay card</a>
-        <a class="pill" href="#/add?acct=${a.id}">Add entry</a>
       </div>
     </div>`;
   }
@@ -304,7 +303,6 @@
       <div class="quick">
         <a href="#/transfer"><span class="q-icon">${I.transfer}</span>Transfer</a>
         <a href="#/pay"><span class="q-icon">${I.bill}</span>Pay bill</a>
-        <a href="#/add"><span class="q-icon">${I.plus}</span>Add entry</a>
       </div>
       <div class="section-title">DEPOSIT ACCOUNTS</div>
       ${deposits().map((a) => `
@@ -318,7 +316,6 @@
           <div class="acct-bal" data-key="acct-${a.id}" data-val="${a.balance}">${money(a.balance)}</div>
           <div class="btn-row">
             <a class="pill soft" href="#/transfer?from=${a.id}">Transfer</a>
-            <a class="pill" href="#/add?acct=${a.id}">Add entry</a>
           </div>
         </div>`).join("")}
       ${cards().length ? `<div class="section-title" style="margin-top:26px">CREDIT CARDS</div>${cards().map(cardBlock).join("")}` : ""}
@@ -369,7 +366,6 @@
         <div class="btn-row">
           ${isCard(a) ? `<a class="pill soft" href="#/pay?card=${a.id}">Pay card</a>` : `<a class="pill soft" href="#/transfer?from=${a.id}">Transfer</a>
           <a class="pill" href="#/pay?from=${a.id}">Pay bill</a>`}
-          <a class="pill" href="#/add?acct=${a.id}">Add entry</a>
         </div>
       </div>
       <div class="section-title">Transactions</div>
@@ -464,26 +460,6 @@
       if (onChange) onChange(dir);
     }));
     return () => dir;
-  }
-
-  function AddEntry(params) {
-    const sel = acct(params.get("acct")) ? params.get("acct") : S.accounts[0].id;
-    view.innerHTML = `${header("Add entry")}
-      ${entryForm(null)}
-      <div class="field"><label for="acct">Account</label><select id="acct">${acctOptions(sel)}</select></div>
-      <div class="field"><label for="date">Date</label><input id="date" type="date" value="${today()}"></div>
-      <div class="err" id="err"></div>
-      <button class="pill solid" id="go">Save entry</button>`;
-    const getDir = wireSeg((d) => { $("#cat").value = d === "in" ? "Income" : "Groceries"; });
-    $("#go").addEventListener("click", () => {
-      const amt = parseAmt($("#amt").value), name = $("#name").value.trim(), a = acct($("#acct").value);
-      if (!(amt > 0)) return fail("Enter an amount greater than $0.");
-      if (!name) return fail("Add a short description.");
-      const signed = getDir() === "in" ? amt : -amt;
-      applyAmt(a, signed);
-      addTx(a.id, name, signed, $("#cat").value, $("#date").value || today());
-      save(); toast("Entry saved"); go("#/account/" + a.id);
-    });
   }
 
   function TxEdit(id) {
@@ -838,7 +814,6 @@
     if (path.startsWith("/tx/")) return editMode ? TxEdit(path.split("/")[2]) : go("#/");
     if (path === "/transfer") return Transfer(params);
     if (path === "/pay") return Pay(params);
-    if (path === "/add") return AddEntry(params);
     if (path === "/more") return More();
     if (path === "/customize") return editMode ? Customize() : go("#/more");
     if (path === "/help") return Help();
